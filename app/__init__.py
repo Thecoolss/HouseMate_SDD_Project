@@ -19,10 +19,12 @@ def create_app():
     login_manager.init_app(app)
     csrf.init_app(app)
 
-    from app.models import __init__  # noqa: F401
-    from app.auth import __init__  # noqa: F401
-    from app.domain1 import __init__  # noqa: F401
-    from app.domain2 import __init__  # noqa: F401
+    # These imports are intentionally unused at runtime; they register package modules
+    # and keep the application factory structure tidy without adding explicit blueprints.
+    from app.models import __init__  # noqa: F401 - imported for module registration side effects
+    from app.auth import __init__  # noqa: F401 - imported for module registration side effects
+    from app.domain1 import __init__  # noqa: F401 - imported for module registration side effects
+    from app.domain2 import __init__  # noqa: F401 - imported for module registration side effects
 
     with app.app_context():
         db.create_all()
