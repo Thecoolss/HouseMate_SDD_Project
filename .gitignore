@@ -1,0 +1,9 @@
+assignment_1.md
+Plan.md
+venv/
+__pycache__/
+*.db
+.coverage
+htmlcov/
+data/
+.env
