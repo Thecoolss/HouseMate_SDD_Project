@@ -5,3 +5,7 @@
 
 
 | 2026-09-23 | GitHub Copilot | "Create the User model for HouseMate..." | Accepted | I added the User database model, exported it from app.models, and implemented password hashing and verification without adding authentication routes yet. | The User model inherits UserMixin so Flask-Login can identify users, and db.Model so SQLAlchemy can create the user table. It stores an id, a unique username, and a password_hash instead of a plaintext password. set_password hashes a supplied password with Werkzeug, while check_password verifies a supplied password against the stored hash. |
+
+
+
+| 2026-09-23 | GitHub Copilot | "Implement the first version of Domain 1's data model..." | Accepted | I added the Task and Booking database models, exported them from app.models, and added ADR-2 to define the boundary between household coordination and contribution analytics. | Task holds information regarding creator, timestamp, due date, title and also stores the household responsibility lifecycle using status and assigned_to: pending with no assignee is unclaimed, pending with an assignee is claimed, and done with an assignee is completed.  Database check constraints limit difficulty to easy, medium, or hard and status to pending or done. Booking stores a resource reservation (start and end time) and its creator. Both models use foreign keys to User, but I did not add relationships or routes yet. |
