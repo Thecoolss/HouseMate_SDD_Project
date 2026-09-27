@@ -12,3 +12,6 @@
 
 
 | 2026-09-24 | GitHub Copilot | "Create app/models/contribution_score.py..." | Accepted | I added the ContributionScore model, exported it from app.models. | ContributionScore is a persisted analytics record for a user over a calculation period. It stores the user's period start/end, completed task count, weighted score, booking count, final contribution percentage, and the timestamp when the calculation was made. This gives Domain 2 a durable artifact rather than a one-off calculation, while Domain 1 keeps the live operational data separate. |
+
+
+| 2026-09-27 | GitHub Copilot | "Implement HouseMate authentication using Flask-Login..." | Accepted | I added the auth blueprint, login/register/logout routes, and minimal templates, while keeping the UI minimal and leaving task/booking routes for later. | The auth blueprint is the application’s login and registration surface. For registration, it checks if the username is valid and there are no duplicates. If no issues there, creates a user object, sets the password, and creates that user in the database. For login, it checks if there is username with the given input by the user, checks the password hash, and if ok, it logs them in and gives them a session token. An error arises if anything is invalid. |

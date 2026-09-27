@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>HouseMate</title>
+  </head>
+  <body>
+    <nav>
+      <a href="/tasks">Tasks</a>
+      <a href="/bookings">Bookings</a>
+      <a href="/contribution">Contribution/Fairness</a>
+      {% if current_user.is_authenticated %}
+        <a href="/logout">Logout</a>
+      {% else %}
+        <a href="/login">Login</a>
+        <a href="/register">Register</a>
+      {% endif %}
+    </nav>
+    <main>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <ul>
+            {% for category, message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>
