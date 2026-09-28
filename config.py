@@ -11,6 +11,7 @@ class Config:
 
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{DATA_DIR / 'app.db'}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    WTF_CSRF_ENABLED = True
 
     PERMANENT_SESSION_LIFETIME = timedelta(days=3)
     SESSION_COOKIE_HTTPONLY = True

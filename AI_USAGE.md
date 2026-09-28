@@ -15,3 +15,6 @@
 
 
 | 2026-09-27 | GitHub Copilot | "Implement HouseMate authentication using Flask-Login..." | Accepted | I added the auth blueprint, login/register/logout routes, and minimal templates, while keeping the UI minimal and leaving task/booking routes for later. | The auth blueprint is the application’s login and registration surface. For registration, it checks if the username is valid and there are no duplicates. If no issues there, creates a user object, sets the password, and creates that user in the database. For login, it checks if there is username with the given input by the user, checks the password hash, and if ok, it logs them in and gives them a session token. An error arises if anything is invalid. |
+
+
+| 2026-09-28 | GitHub Copilot | "Review and harden the existing Flask authentication implementation..." | Accepted | I made CSRF protection explicit in the configuration and verified that missing tokens are rejected while valid form submissions reach the route logic. | The session cookie identifies the logged-in user, while the CSRF token proves that a state-changing form came from the application. Flask-WTF rejects a POST without a valid CSRF token before the route runs. The authentication session remains permanent for three days, and the session cookie remains HttpOnly and SameSite=Lax. |
