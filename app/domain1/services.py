@@ -5,6 +5,7 @@ from app.models import Task
 
 
 VALID_DIFFICULTIES = {"easy", "medium", "hard"}
+_UNCHANGED = object()
 
 
 def _get_task(task_id):
@@ -43,7 +44,14 @@ def create_task(user, title, description, difficulty, due_date=None):
     return task
 
 
-def update_task(user, task_id, title=None, description=None, difficulty=None, due_date=None):
+def update_task(
+    user,
+    task_id,
+    title=None,
+    description=_UNCHANGED,
+    difficulty=None,
+    due_date=_UNCHANGED,
+):
     task = _get_task(task_id)
     if task.created_by != user.id:
         raise PermissionError("Only the task creator can edit this task.")
@@ -54,8 +62,10 @@ def update_task(user, task_id, title=None, description=None, difficulty=None, du
         _validate_difficulty(difficulty)
         task.difficulty = difficulty
 
-    task.description = description
-    task.due_date = due_date
+    if description is not _UNCHANGED:
+        task.description = description
+    if due_date is not _UNCHANGED:
+        task.due_date = due_date
     db.session.commit()
     return task
 
