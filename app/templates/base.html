@@ -3,10 +3,13 @@
   <head>
     <meta charset="utf-8">
     <title>HouseMate</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
     <nav>
-      <a href="/tasks">Tasks</a>
+      <a class="brand" href="{{ url_for('home') }}">HouseMate</a>
+      <a href="{{ url_for('domain1.list_tasks') }}">Tasks</a>
       <a href="/bookings">Bookings</a>
       <a href="/contribution">Contribution/Fairness</a>
       {% if current_user.is_authenticated %}
@@ -15,14 +18,14 @@
           <button type="submit">Logout</button>
         </form>
       {% else %}
-        <a href="/login">Login</a>
-        <a href="/register">Register</a>
+        <a href="{{ url_for('auth.login') }}">Login</a>
+        <a href="{{ url_for('auth.register') }}">Register</a>
       {% endif %}
     </nav>
     <main>
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-          <ul>
+          <ul class="flash-messages">
             {% for category, message in messages %}
               <li>{{ message }}</li>
             {% endfor %}

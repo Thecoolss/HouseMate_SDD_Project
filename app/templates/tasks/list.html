@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Household coordination</p>
+      <h1>Tasks</h1>
+      <p class="lede">Keep shared responsibilities visible and moving.</p>
+    </div>
+    <a class="button button-primary" href="{{ url_for('domain1.new_task') }}">Create task</a>
+  </header>
+
+  {% if tasks %}
+    <section class="task-list" aria-label="Household tasks">
+      {% for task in tasks %}
+        <article class="task-row">
+          <div class="task-main">
+            <div class="task-title-line">
+              <h2>{{ task.title }}</h2>
+              <span class="status status-{{ task.status }}">{{ task.status }}</span>
+            </div>
+            {% if task.description %}<p class="task-description">{{ task.description }}</p>{% endif %}
+            <dl class="task-meta">
+              <div><dt>Difficulty</dt><dd>{{ task.difficulty }}</dd></div>
+              <div><dt>Due</dt><dd>{{ task.due_date.strftime("%b %d, %Y %H:%M") if task.due_date else "No due date" }}</dd></div>
+              <div><dt>Created by</dt><dd>{{ usernames.get(task.created_by, "Unknown") }}</dd></div>
+              <div><dt>Assignee</dt><dd>{{ usernames.get(task.assigned_to, "Unclaimed") if task.assigned_to else "Unclaimed" }}</dd></div>
+            </dl>
+          </div>
+          <div class="task-actions">
+            {% if task.status == "pending" and task.assigned_to is none %}
+              <form method="post" action="{{ url_for('domain1.claim_task', task_id=task.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="button button-secondary" type="submit">Claim</button>
+              </form>
+            {% endif %}
+            {% if task.status == "pending" and task.assigned_to == current_user.id %}
+              <form method="post" action="{{ url_for('domain1.complete_task', task_id=task.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="button button-secondary" type="submit">Complete</button>
+              </form>
+            {% endif %}
+            {% if task.created_by == current_user.id %}
+              <a class="button button-quiet" href="{{ url_for('domain1.edit_task', task_id=task.id) }}">Edit</a>
+              <form method="post" action="{{ url_for('domain1.remove_task', task_id=task.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="button button-danger" type="submit">Delete</button>
+              </form>
+            {% endif %}
+          </div>
+        </article>
+      {% endfor %}
+    </section>
+  {% else %}
+    <section class="empty-state">
+      <p class="eyebrow">Nothing on the list yet</p>
+      <h2>Start with one shared task.</h2>
+      <p>Create a task and your household can claim it when ready.</p>
+      <a class="button button-primary" href="{{ url_for('domain1.new_task') }}">Create the first task</a>
+    </section>
+  {% endif %}
+{% endblock %}

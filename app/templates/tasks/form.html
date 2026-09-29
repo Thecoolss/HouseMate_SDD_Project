@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Household coordination</p>
+      <h1>{{ "Edit task" if task else "Create a task" }}</h1>
+      <p class="lede">{{ "Update the task details." if task else "Add a responsibility for the household." }}</p>
+    </div>
+    <a class="button button-quiet" href="{{ url_for('domain1.list_tasks') }}">Back to tasks</a>
+  </header>
+
+  <form class="task-form" method="post" action="{{ url_for('domain1.edit_task', task_id=task.id) if task else url_for('domain1.create_task') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="title">Title</label>
+    <input id="title" name="title" maxlength="200" required value="{{ form_data.get('title', task.title if task else '') }}">
+
+    <label for="description">Description</label>
+    <textarea id="description" name="description" rows="4">{{ form_data.get('description', task.description if task and task.description else '') }}</textarea>
+
+    <div class="form-grid">
+      <div>
+        <label for="difficulty">Difficulty</label>
+        {% set selected_difficulty = form_data.get('difficulty', task.difficulty if task else 'medium') %}
+        <select id="difficulty" name="difficulty" required>
+          <option value="easy" {{ "selected" if selected_difficulty == "easy" }}>Easy</option>
+          <option value="medium" {{ "selected" if selected_difficulty == "medium" }}>Medium</option>
+          <option value="hard" {{ "selected" if selected_difficulty == "hard" }}>Hard</option>
+        </select>
+      </div>
+      <div>
+        <label for="due_date">Due date</label>
+        <input id="due_date" name="due_date" type="datetime-local" value="{{ form_data.get('due_date', task.due_date.strftime('%Y-%m-%dT%H:%M') if task and task.due_date else '') }}">
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="button button-primary" type="submit">{{ "Save changes" if task else "Create task" }}</button>
+      <a class="button button-quiet" href="{{ url_for('domain1.list_tasks') }}">Cancel</a>
+    </div>
+  </form>
+{% endblock %}

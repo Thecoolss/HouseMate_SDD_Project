@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, redirect, url_for
 from flask_login import LoginManager
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import CSRFProtect
@@ -30,10 +30,19 @@ def create_app():
     # These imports register the packages so SQLAlchemy and the auth blueprint are available.
     from app.models import __init__
     from app.auth import bp as auth_bp
-    from app.domain1 import __init__
+    from app.domain1 import bp as domain1_bp
     from app.domain2 import __init__
 
     app.register_blueprint(auth_bp, url_prefix="")
+    app.register_blueprint(domain1_bp, url_prefix="")
+
+    @app.get("/")
+    def home():
+        from flask_login import current_user
+
+        if current_user.is_authenticated:
+            return redirect(url_for("domain1.list_tasks"))
+        return redirect(url_for("auth.login"))
 
     with app.app_context():
         db.create_all()
