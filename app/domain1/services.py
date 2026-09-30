@@ -16,6 +16,13 @@ def _get_task(task_id):
     return task
 
 
+def get_task_for_edit(user, task_id):
+    task = _get_task(task_id)
+    if task.created_by != user.id:
+        raise PermissionError("Only the task creator can edit this task.")
+    return task
+
+
 def _validate_title(title):
     if not isinstance(title, str) or not title.strip():
         raise ValueError("Task title is required.")
@@ -53,9 +60,7 @@ def update_task(
     difficulty=None,
     due_date=_UNCHANGED,
 ):
-    task = _get_task(task_id)
-    if task.created_by != user.id:
-        raise PermissionError("Only the task creator can edit this task.")
+    task = get_task_for_edit(user, task_id)
 
     if title is not None:
         task.title = _validate_title(title)
@@ -140,6 +145,13 @@ def _get_booking(booking_id):
     return booking
 
 
+def get_booking_for_edit(user, booking_id):
+    booking = _get_booking(booking_id)
+    if booking.created_by != user.id:
+        raise PermissionError("Only the booking creator can edit this booking.")
+    return booking
+
+
 def _validate_booking(resource, start_time, end_time):
     if not isinstance(resource, str) or not resource.strip():
         raise ValueError("Resource is required.")
@@ -181,9 +193,7 @@ def create_booking(user, resource, start_time, end_time):
 
 
 def update_booking(user, booking_id, resource=None, start_time=None, end_time=None):
-    booking = _get_booking(booking_id)
-    if booking.created_by != user.id:
-        raise PermissionError("Only the booking creator can edit this booking.")
+    booking = get_booking_for_edit(user, booking_id)
 
     updated_resource = resource if resource is not None else booking.resource
     updated_start = start_time if start_time is not None else booking.start_time

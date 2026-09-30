@@ -5,7 +5,7 @@ from flask_login import current_user, login_required
 
 from app.domain1 import bp
 from app.domain1 import services
-from app.models import Booking, Task, User
+from app.models import User
 
 
 def _parse_due_date(value):
@@ -64,11 +64,13 @@ def create_task():
 @bp.route("/tasks/<int:task_id>/edit", methods=["GET", "POST"])
 @login_required
 def edit_task(task_id):
-    task = db_task = Task.query.get_or_404(task_id)
-    if db_task.created_by != current_user.id:
-        abort(403)
-
     if request.method == "GET":
+        try:
+            task = services.get_task_for_edit(current_user, task_id)
+        except PermissionError:
+            abort(403)
+        except ValueError:
+            abort(404)
         return render_template("tasks/form.html", task=task, form_data={})
 
     form_data = request.form
@@ -87,6 +89,12 @@ def edit_task(task_id):
         if str(error) == "Task not found.":
             abort(404)
         flash(str(error), "error")
+        try:
+            task = services.get_task_for_edit(current_user, task_id)
+        except PermissionError:
+            abort(403)
+        except ValueError:
+            abort(404)
         return render_template("tasks/form.html", task=task, form_data=form_data), 400
 
     flash("Task updated.", "success")
@@ -184,11 +192,13 @@ def create_booking():
 @bp.route("/bookings/<int:booking_id>/edit", methods=["GET", "POST"])
 @login_required
 def edit_booking(booking_id):
-    booking = Booking.query.get_or_404(booking_id)
-    if booking.created_by != current_user.id:
-        abort(403)
-
     if request.method == "GET":
+        try:
+            booking = services.get_booking_for_edit(current_user, booking_id)
+        except PermissionError:
+            abort(403)
+        except ValueError:
+            abort(404)
         return render_template("bookings/form.html", booking=booking, form_data={})
 
     form_data = request.form
@@ -206,6 +216,12 @@ def edit_booking(booking_id):
         if str(error) == "Booking not found.":
             abort(404)
         flash(str(error), "error")
+        try:
+            booking = services.get_booking_for_edit(current_user, booking_id)
+        except PermissionError:
+            abort(403)
+        except ValueError:
+            abort(404)
         return render_template("bookings/form.html", booking=booking, form_data=form_data), 400
 
     flash("Booking updated.", "success")
