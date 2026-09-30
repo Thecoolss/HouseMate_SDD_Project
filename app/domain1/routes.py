@@ -5,7 +5,7 @@ from flask_login import current_user, login_required
 
 from app.domain1 import bp
 from app.domain1 import services
-from app.models import Task, User
+from app.models import Booking, Task, User
 
 
 def _parse_due_date(value):
@@ -128,3 +128,98 @@ def remove_task(task_id):
         return _handle_task_error(error)
     flash("Task deleted.", "success")
     return redirect(url_for("domain1.list_tasks"))
+
+
+def _parse_booking_datetime(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise ValueError("Enter a valid booking date and time.") from None
+
+
+def _handle_booking_error(error):
+    if str(error) == "Booking not found.":
+        abort(404)
+    flash(str(error), "error")
+    return redirect(url_for("domain1.list_bookings"))
+
+
+@bp.get("/bookings")
+@login_required
+def list_bookings():
+    bookings = services.list_bookings(current_user)
+    user_ids = {booking.created_by for booking in bookings}
+    users = User.query.filter(User.id.in_(user_ids)).all() if user_ids else []
+    usernames = {user.id: user.username for user in users}
+    return render_template("bookings/list.html", bookings=bookings, usernames=usernames)
+
+
+@bp.get("/bookings/new")
+@login_required
+def new_booking():
+    return render_template("bookings/form.html", booking=None, form_data={})
+
+
+@bp.post("/bookings")
+@login_required
+def create_booking():
+    form_data = request.form
+    try:
+        services.create_booking(
+            current_user,
+            resource=form_data.get("resource"),
+            start_time=_parse_booking_datetime(form_data.get("start_time")),
+            end_time=_parse_booking_datetime(form_data.get("end_time")),
+        )
+    except ValueError as error:
+        flash(str(error), "error")
+        return render_template("bookings/form.html", booking=None, form_data=form_data), 400
+
+    flash("Booking created.", "success")
+    return redirect(url_for("domain1.list_bookings"))
+
+
+@bp.route("/bookings/<int:booking_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_booking(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    if booking.created_by != current_user.id:
+        abort(403)
+
+    if request.method == "GET":
+        return render_template("bookings/form.html", booking=booking, form_data={})
+
+    form_data = request.form
+    try:
+        services.update_booking(
+            current_user,
+            booking_id,
+            resource=form_data.get("resource"),
+            start_time=_parse_booking_datetime(form_data.get("start_time")),
+            end_time=_parse_booking_datetime(form_data.get("end_time")),
+        )
+    except PermissionError:
+        abort(403)
+    except ValueError as error:
+        if str(error) == "Booking not found.":
+            abort(404)
+        flash(str(error), "error")
+        return render_template("bookings/form.html", booking=booking, form_data=form_data), 400
+
+    flash("Booking updated.", "success")
+    return redirect(url_for("domain1.list_bookings"))
+
+
+@bp.post("/bookings/<int:booking_id>/delete")
+@login_required
+def remove_booking(booking_id):
+    try:
+        services.delete_booking(current_user, booking_id)
+    except PermissionError:
+        abort(403)
+    except ValueError as error:
+        return _handle_booking_error(error)
+    flash("Booking deleted.", "success")
+    return redirect(url_for("domain1.list_bookings"))

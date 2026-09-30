@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Shared resources</p>
+      <h1>Bookings</h1>
+      <p class="lede">See when household spaces and equipment are reserved.</p>
+    </div>
+    <a class="button button-primary" href="{{ url_for('domain1.new_booking') }}">New booking</a>
+  </header>
+
+  {% if bookings %}
+    <section class="booking-list" aria-label="Household bookings">
+      {% for booking in bookings %}
+        <article class="booking-row">
+          <div class="booking-main">
+            <div class="booking-title-line">
+              <h2>{{ booking.resource.replace("_", " ")|title }}</h2>
+              <span class="booking-time">{{ booking.start_time.strftime("%b %d, %Y") }}</span>
+            </div>
+            <dl class="booking-meta">
+              <div><dt>Start</dt><dd>{{ booking.start_time.strftime("%H:%M") }}</dd></div>
+              <div><dt>End</dt><dd>{{ booking.end_time.strftime("%H:%M") }}</dd></div>
+              <div><dt>Reserved by</dt><dd>{{ usernames.get(booking.created_by, "Unknown") }}</dd></div>
+            </dl>
+          </div>
+          {% if booking.created_by == current_user.id %}
+            <div class="booking-actions">
+              <a class="button button-quiet" href="{{ url_for('domain1.edit_booking', booking_id=booking.id) }}">Edit</a>
+              <form method="post" action="{{ url_for('domain1.remove_booking', booking_id=booking.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="button button-danger" type="submit">Delete</button>
+              </form>
+            </div>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </section>
+  {% else %}
+    <section class="empty-state">
+      <p class="eyebrow">No reservations yet</p>
+      <h2>Reserve a shared resource.</h2>
+      <p>Bookings prevent conflicting plans for the same household resource.</p>
+      <a class="button button-primary" href="{{ url_for('domain1.new_booking') }}">Create the first booking</a>
+    </section>
+  {% endif %}
+{% endblock %}

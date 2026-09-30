@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Shared resources</p>
+      <h1>{{ "Edit booking" if booking else "New booking" }}</h1>
+      <p class="lede">Choose a resource and its reservation window.</p>
+    </div>
+    <a class="button button-quiet" href="{{ url_for('domain1.list_bookings') }}">Back to bookings</a>
+  </header>
+
+  {% set selected_resource = form_data.get('resource', booking.resource if booking else 'laundry') %}
+  <form class="booking-form" method="post" action="{{ url_for('domain1.edit_booking', booking_id=booking.id) if booking else url_for('domain1.create_booking') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="resource">Resource</label>
+    <select id="resource" name="resource" required>
+      <option value="laundry" {{ "selected" if selected_resource == "laundry" }}>Laundry</option>
+      <option value="kitchen" {{ "selected" if selected_resource == "kitchen" }}>Kitchen</option>
+      <option value="living_room" {{ "selected" if selected_resource == "living_room" }}>Living room</option>
+    </select>
+
+    <div class="form-grid">
+      <div>
+        <label for="start_time">Start</label>
+        <input id="start_time" name="start_time" type="datetime-local" required value="{{ form_data.get('start_time', booking.start_time.strftime('%Y-%m-%dT%H:%M') if booking else '') }}">
+      </div>
+      <div>
+        <label for="end_time">End</label>
+        <input id="end_time" name="end_time" type="datetime-local" required value="{{ form_data.get('end_time', booking.end_time.strftime('%Y-%m-%dT%H:%M') if booking else '') }}">
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="button button-primary" type="submit">{{ "Save changes" if booking else "Create booking" }}</button>
+      <a class="button button-quiet" href="{{ url_for('domain1.list_bookings') }}">Cancel</a>
+    </div>
+  </form>
+{% endblock %}

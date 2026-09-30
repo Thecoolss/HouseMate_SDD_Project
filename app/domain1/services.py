@@ -5,6 +5,7 @@ from app.models import Booking, Task
 
 
 VALID_DIFFICULTIES = {"easy", "medium", "hard"}
+VALID_BOOKING_RESOURCES = {"laundry", "kitchen", "living_room"}
 _UNCHANGED = object()
 
 
@@ -142,11 +143,14 @@ def _get_booking(booking_id):
 def _validate_booking(resource, start_time, end_time):
     if not isinstance(resource, str) or not resource.strip():
         raise ValueError("Resource is required.")
+    resource = resource.strip()
+    if resource not in VALID_BOOKING_RESOURCES:
+        raise ValueError("Choose a valid household resource.")
     if not isinstance(start_time, datetime) or not isinstance(end_time, datetime):
         raise ValueError("Booking start and end times are required.")
     if end_time <= start_time:
         raise ValueError("Booking end time must be after its start time.")
-    return resource.strip()
+    return resource
 
 
 def _has_booking_conflict(resource, start_time, end_time, exclude_booking_id=None):
