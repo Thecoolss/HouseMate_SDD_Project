@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from app import db
-from app.models import Task
+from app.models import Booking, Task
 
 
 VALID_DIFFICULTIES = {"easy", "medium", "hard"}
@@ -130,3 +130,100 @@ def get_completed_task_contributions(period_start, period_end):
         }
         for user_id, difficulty, completed_at in rows
     ]
+
+
+def _get_booking(booking_id):
+    booking = db.session.get(Booking, booking_id)
+    if booking is None:
+        raise ValueError("Booking not found.")
+    return booking
+
+
+def _validate_booking(resource, start_time, end_time):
+    if not isinstance(resource, str) or not resource.strip():
+        raise ValueError("Resource is required.")
+    if not isinstance(start_time, datetime) or not isinstance(end_time, datetime):
+        raise ValueError("Booking start and end times are required.")
+    if end_time <= start_time:
+        raise ValueError("Booking end time must be after its start time.")
+    return resource.strip()
+
+
+def _has_booking_conflict(resource, start_time, end_time, exclude_booking_id=None):
+    query = db.select(Booking.id).where(
+        Booking.resource == resource,
+        Booking.start_time < end_time,
+        Booking.end_time > start_time,
+    )
+    if exclude_booking_id is not None:
+        query = query.where(Booking.id != exclude_booking_id)
+    return db.session.scalar(query) is not None
+
+
+def create_booking(user, resource, start_time, end_time):
+    resource = _validate_booking(resource, start_time, end_time)
+    if _has_booking_conflict(resource, start_time, end_time):
+        raise ValueError("This resource is already booked during that time.")
+
+    booking = Booking(
+        resource=resource,
+        start_time=start_time,
+        end_time=end_time,
+        created_by=user.id,
+    )
+    db.session.add(booking)
+    db.session.commit()
+    return booking
+
+
+def update_booking(user, booking_id, resource=None, start_time=None, end_time=None):
+    booking = _get_booking(booking_id)
+    if booking.created_by != user.id:
+        raise PermissionError("Only the booking creator can edit this booking.")
+
+    updated_resource = resource if resource is not None else booking.resource
+    updated_start = start_time if start_time is not None else booking.start_time
+    updated_end = end_time if end_time is not None else booking.end_time
+    updated_resource = _validate_booking(updated_resource, updated_start, updated_end)
+
+    if _has_booking_conflict(
+        updated_resource,
+        updated_start,
+        updated_end,
+        exclude_booking_id=booking.id,
+    ):
+        raise ValueError("This resource is already booked during that time.")
+
+    booking.resource = updated_resource
+    booking.start_time = updated_start
+    booking.end_time = updated_end
+    db.session.commit()
+    return booking
+
+
+def delete_booking(user, booking_id):
+    booking = _get_booking(booking_id)
+    if booking.created_by != user.id:
+        raise PermissionError("Only the booking creator can delete this booking.")
+
+    db.session.delete(booking)
+    db.session.commit()
+
+
+def list_bookings(user):
+    return Booking.query.order_by(Booking.start_time.asc(), Booking.id.asc()).all()
+
+
+def get_booking_contributions(period_start, period_end):
+    if period_start is None or period_end is None or period_start > period_end:
+        raise ValueError("The contribution period is invalid.")
+
+    rows = db.session.execute(
+        db.select(Booking.created_by)
+        .where(
+            Booking.start_time >= period_start,
+            Booking.start_time <= period_end,
+        )
+        .order_by(Booking.start_time.asc())
+    )
+    return [{"user_id": user_id} for (user_id,) in rows]
