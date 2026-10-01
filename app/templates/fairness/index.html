@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Household analytics</p>
+      <h1>Contribution</h1>
+      <p class="lede">A view of recorded household activity, not an objective judgment of fairness.</p>
+    </div>
+    <form method="post" action="{{ url_for('domain2.recalculate_fairness') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="button button-primary" type="submit">Recalculate</button>
+    </form>
+  </header>
+
+  <p class="analytics-note">
+    Contribution points come from completed task difficulty and bookings during the period.
+    Overdue tasks are shown separately and do not reduce contribution percentages.
+  </p>
+
+  {% if rows %}
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead>
+          <tr>
+            <th scope="col">User</th>
+            <th scope="col">Period</th>
+            <th scope="col">Tasks completed</th>
+            <th scope="col">Weighted points</th>
+            <th scope="col">Bookings</th>
+            <th scope="col">Overdue tasks</th>
+            <th scope="col">Contribution</th>
+            <th scope="col">Calculated at</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user, score in rows %}
+            <tr>
+              <th scope="row">{{ user.username }}</th>
+              {% if score %}
+                <td>{{ score.period_start.strftime("%b %d, %Y") }} - {{ score.period_end.strftime("%b %d, %Y") }}</td>
+                <td>{{ score.tasks_completed }}</td>
+                <td>{{ "%.2f"|format(score.weighted_score) }}</td>
+                <td>{{ score.bookings_count }}</td>
+                <td>{{ score.overdue_tasks if score.overdue_tasks is not none else "Not recorded" }}</td>
+                <td>{{ "%.2f%%"|format(score.contribution_score) }}</td>
+                <td>{{ score.calculated_at.strftime("%b %d, %Y %H:%M UTC") }}</td>
+              {% else %}
+                <td colspan="7" class="not-calculated">No calculation yet</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <section class="empty-state">
+      <p class="eyebrow">No household members</p>
+      <h2>There are no contribution records to calculate.</h2>
+    </section>
+  {% endif %}
+{% endblock %}

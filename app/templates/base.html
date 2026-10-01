@@ -11,7 +11,7 @@
       <a class="brand" href="{{ url_for('home') }}">HouseMate</a>
       <a href="{{ url_for('domain1.list_tasks') }}">Tasks</a>
       <a href="{{ url_for('domain1.list_bookings') }}">Bookings</a>
-      <a href="/contribution">Contribution/Fairness</a>
+      <a href="{{ url_for('domain2.fairness') }}">Contribution/Fairness</a>
       {% if current_user.is_authenticated %}
         <form method="post" action="{{ url_for('auth.logout') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

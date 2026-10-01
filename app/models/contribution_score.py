@@ -13,6 +13,6 @@ class ContributionScore(db.Model):
     tasks_completed = db.Column(db.Integer, nullable=False, default=0)
     weighted_score = db.Column(db.Float, nullable=False, default=0.0)
     bookings_count = db.Column(db.Integer, nullable=False, default=0)
-    overdue_tasks = db.Column(db.Integer, nullable=True, default=0)
+    overdue_tasks = db.Column(db.Integer, nullable=True)
     contribution_score = db.Column(db.Float, nullable=False, default=0.0)
     calculated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

@@ -31,10 +31,11 @@ def create_app():
     from app.models import __init__
     from app.auth import bp as auth_bp
     from app.domain1 import bp as domain1_bp
-    from app.domain2 import __init__
+    from app.domain2 import bp as domain2_bp
 
     app.register_blueprint(auth_bp, url_prefix="")
     app.register_blueprint(domain1_bp, url_prefix="")
+    app.register_blueprint(domain2_bp, url_prefix="")
 
     @app.get("/")
     def home():
