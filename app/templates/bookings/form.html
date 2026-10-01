@@ -23,11 +23,13 @@
     <div class="form-grid">
       <div>
         <label for="start_time">Start</label>
-        <input id="start_time" name="start_time" type="datetime-local" required value="{{ form_data.get('start_time', booking.start_time.strftime('%Y-%m-%dT%H:%M') if booking else '') }}">
+        {% set stored_start_time = booking.start_time|localdatetime('%Y-%m-%dT%H:%M') if booking else '' %}
+        <input id="start_time" name="start_time" type="datetime-local" required value="{{ form_data.get('start_time', stored_start_time) }}">
       </div>
       <div>
         <label for="end_time">End</label>
-        <input id="end_time" name="end_time" type="datetime-local" required value="{{ form_data.get('end_time', booking.end_time.strftime('%Y-%m-%dT%H:%M') if booking else '') }}">
+        {% set stored_end_time = booking.end_time|localdatetime('%Y-%m-%dT%H:%M') if booking else '' %}
+        <input id="end_time" name="end_time" type="datetime-local" required value="{{ form_data.get('end_time', stored_end_time) }}">
       </div>
     </div>
 

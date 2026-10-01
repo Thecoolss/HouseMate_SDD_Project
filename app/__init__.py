@@ -3,6 +3,7 @@ from flask_login import LoginManager
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import CSRFProtect
 
+from app.time_utils import format_local_datetime
 from config import Config
 
 
@@ -16,6 +17,8 @@ def load_user(user_id):
     from app.models import User
 
     return db.session.get(User, int(user_id))
+
+
 
 
 def create_app():
@@ -44,6 +47,7 @@ def create_app():
         if current_user.is_authenticated:
             return redirect(url_for("domain1.list_tasks"))
         return redirect(url_for("auth.login"))
+    app.add_template_filter(format_local_datetime, "localdatetime")
 
     with app.app_context():
         db.create_all()

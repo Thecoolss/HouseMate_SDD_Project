@@ -17,11 +17,11 @@
           <div class="booking-main">
             <div class="booking-title-line">
               <h2>{{ booking.resource.replace("_", " ")|title }}</h2>
-              <span class="booking-time">{{ booking.start_time.strftime("%b %d, %Y") }}</span>
+              <span class="booking-time">{{ booking.start_time|localdatetime("%b %d, %Y") }}</span>
             </div>
             <dl class="booking-meta">
-              <div><dt>Start</dt><dd>{{ booking.start_time.strftime("%H:%M") }}</dd></div>
-              <div><dt>End</dt><dd>{{ booking.end_time.strftime("%H:%M") }}</dd></div>
+              <div><dt>Start</dt><dd>{{ booking.start_time|localdatetime("%H:%M") }}</dd></div>
+              <div><dt>End</dt><dd>{{ booking.end_time|localdatetime("%H:%M") }}</dd></div>
               <div><dt>Reserved by</dt><dd>{{ usernames.get(booking.created_by, "Unknown") }}</dd></div>
             </dl>
           </div>

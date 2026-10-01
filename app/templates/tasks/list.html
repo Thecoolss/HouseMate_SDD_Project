@@ -22,7 +22,7 @@
             {% if task.description %}<p class="task-description">{{ task.description }}</p>{% endif %}
             <dl class="task-meta">
               <div><dt>Difficulty</dt><dd>{{ task.difficulty }}</dd></div>
-              <div><dt>Due</dt><dd>{{ task.due_date.strftime("%b %d, %Y %H:%M") if task.due_date else "No due date" }}</dd></div>
+              <div><dt>Due</dt><dd>{{ task.due_date|localdatetime("%b %d, %Y %H:%M") if task.due_date else "No due date" }}</dd></div>
               <div><dt>Created by</dt><dd>{{ usernames.get(task.created_by, "Unknown") }}</dd></div>
               <div><dt>Assignee</dt><dd>{{ usernames.get(task.assigned_to, "Unclaimed") if task.assigned_to else "Unclaimed" }}</dd></div>
             </dl>

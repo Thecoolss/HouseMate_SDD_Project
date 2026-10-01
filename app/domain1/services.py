@@ -197,6 +197,7 @@ def _has_booking_conflict(resource, start_time, end_time, exclude_booking_id=Non
 
 
 def create_booking(user, resource, start_time, end_time):
+    
     resource = _validate_booking(resource, start_time, end_time)
     if _has_booking_conflict(resource, start_time, end_time):
         raise ValueError("This resource is already booked during that time.")

@@ -6,15 +6,17 @@ from flask_login import current_user, login_required
 from app.domain1 import bp
 from app.domain1 import services
 from app.models import User
+from app.time_utils import local_to_utc_naive
 
 
 def _parse_due_date(value):
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value)
+        local_time = datetime.fromisoformat(value)
     except ValueError:
         raise ValueError("Enter a valid due date and time.") from None
+    return local_to_utc_naive(local_time)
 
 
 def _handle_task_error(error):
@@ -142,9 +144,10 @@ def _parse_booking_datetime(value):
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value)
+        local_time = datetime.fromisoformat(value)
     except ValueError:
         raise ValueError("Enter a valid booking date and time.") from None
+    return local_to_utc_naive(local_time)
 
 
 def _handle_booking_error(error):
