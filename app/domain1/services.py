@@ -138,6 +138,26 @@ def get_completed_task_contributions(period_start, period_end):
     ]
 
 
+def get_overdue_task_counts(calculated_at):
+    if not isinstance(calculated_at, datetime):
+        raise ValueError("The calculation time is invalid.")
+
+    rows = db.session.execute(
+        db.select(Task.assigned_to, db.func.count(Task.id))
+        .where(
+            Task.status == "pending",
+            Task.assigned_to.is_not(None),
+            Task.due_date.is_not(None),
+            Task.due_date < calculated_at,
+        )
+        .group_by(Task.assigned_to)
+    )
+    return [
+        {"user_id": user_id, "overdue_tasks": overdue_count}
+        for user_id, overdue_count in rows
+    ]
+
+
 def _get_booking(booking_id):
     booking = db.session.get(Booking, booking_id)
     if booking is None:
