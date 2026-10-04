@@ -1,11 +1,16 @@
 from datetime import datetime
 
 from app import db
+from app.domain1.rules import (
+    VALID_BOOKING_RESOURCES,
+    VALID_DIFFICULTIES,
+    validate_booking,
+    validate_difficulty,
+    validate_title,
+)
 from app.models import Booking, Task
 
 
-VALID_DIFFICULTIES = {"easy", "medium", "hard"}
-VALID_BOOKING_RESOURCES = {"laundry", "kitchen", "living_room"}
 _UNCHANGED = object()
 
 
@@ -23,20 +28,9 @@ def get_task_for_edit(user, task_id):
     return task
 
 
-def _validate_title(title):
-    if not isinstance(title, str) or not title.strip():
-        raise ValueError("Task title is required.")
-    return title.strip()
-
-
-def _validate_difficulty(difficulty):
-    if difficulty not in VALID_DIFFICULTIES:
-        raise ValueError("Difficulty must be easy, medium, or hard.")
-
-
 def create_task(user, title, description, difficulty, due_date=None):
-    title = _validate_title(title)
-    _validate_difficulty(difficulty)
+    title = validate_title(title)
+    validate_difficulty(difficulty)
 
     task = Task(
         title=title,
@@ -63,9 +57,9 @@ def update_task(
     task = get_task_for_edit(user, task_id)
 
     if title is not None:
-        task.title = _validate_title(title)
+        task.title = validate_title(title)
     if difficulty is not None:
-        _validate_difficulty(difficulty)
+        validate_difficulty(difficulty)
         task.difficulty = difficulty
 
     if description is not _UNCHANGED:
@@ -172,19 +166,6 @@ def get_booking_for_edit(user, booking_id):
     return booking
 
 
-def _validate_booking(resource, start_time, end_time):
-    if not isinstance(resource, str) or not resource.strip():
-        raise ValueError("Resource is required.")
-    resource = resource.strip()
-    if resource not in VALID_BOOKING_RESOURCES:
-        raise ValueError("Choose a valid household resource.")
-    if not isinstance(start_time, datetime) or not isinstance(end_time, datetime):
-        raise ValueError("Booking start and end times are required.")
-    if end_time <= start_time:
-        raise ValueError("Booking end time must be after its start time.")
-    return resource
-
-
 def _has_booking_conflict(resource, start_time, end_time, exclude_booking_id=None):
     query = db.select(Booking.id).where(
         Booking.resource == resource,
@@ -197,8 +178,7 @@ def _has_booking_conflict(resource, start_time, end_time, exclude_booking_id=Non
 
 
 def create_booking(user, resource, start_time, end_time):
-    
-    resource = _validate_booking(resource, start_time, end_time)
+    resource = validate_booking(resource, start_time, end_time)
     if _has_booking_conflict(resource, start_time, end_time):
         raise ValueError("This resource is already booked during that time.")
 
@@ -219,7 +199,7 @@ def update_booking(user, booking_id, resource=None, start_time=None, end_time=No
     updated_resource = resource if resource is not None else booking.resource
     updated_start = start_time if start_time is not None else booking.start_time
     updated_end = end_time if end_time is not None else booking.end_time
-    updated_resource = _validate_booking(updated_resource, updated_start, updated_end)
+    updated_resource = validate_booking(updated_resource, updated_start, updated_end)
 
     if _has_booking_conflict(
         updated_resource,
