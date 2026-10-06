@@ -21,3 +21,19 @@ Context: Domain 1 requires persistent operational state for users, tasks, and bo
 Decision: Use four application tables: user, task, booking, and contribution_score. User contains a unique id, a unique username, and a password hash. Tasks contain created_by, description, difficulty, due_date, and assigned_to foreign keys; bookings contain resource, created_by, and time fields. ContributionScore belongs to a user and stores a calculation-period snapshot, including completed task counts, weighted contribution, booking counts, and overdue pending task counts. Positive contribution is calculated from completed task points and bookings; overdue tasks are reported separately and do not reduce contribution percentages. Each recalculation creates new ContributionScore rows rather than overwriting historical results.
 Alternatives considered: 1. Store the current score directly on User — rejected because it would lose historical periods and couple analytics state to the identity record. 2. Recalculate and discard the result — rejected because users should be able to inspect previous calculation periods and Domain 2 needs persistent state. 
 Consequences: The database remains small and easy to understand, historical analytics are preserved, and the ER diagram can clearly show Domain 1's operational tables and Domain 2's derived table.
+
+## 4. Testing approach
+Date: 2026-10-02
+Status: Decided
+Context:
+The assignment requires at least 70% coverage of the core business logic. The most important correctness risks are authorization, task state transitions, booking conflicts, and contribution calculations.
+
+Decision:
+Prioritize unit and integration tests around the Domain 1 and Domain 2 service layers. Use Flask route tests only where necessary to verify authentication/integration behavior, rather than attempting to achieve coverage through templates and framework glue.
+
+Alternatives considered:
+1. Primarily browser/end-to-end testing — rejected because it is slower, harder to isolate business rules, and does not directly target the required core-logic coverage.
+2. Testing every route/template exhaustively — rejected because the highest-risk behavior is in service-layer rules and calculations.
+
+Consequences:
+The core business rules should have high coverage and be easy to regression-test. Some presentation-layer regressions will still need manual verification.
