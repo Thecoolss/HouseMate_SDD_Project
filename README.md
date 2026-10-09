@@ -17,13 +17,118 @@ The application runs as one Flask process and persists data in SQLite.
 - **Domain 2 — Contribution analytics** calculates and persists contribution snapshots.
 - Domain 2 obtains completed-task, booking, and overdue-task data through functions exposed by Domain 1 services. This is the current modular seam between the domains.
 - Flask routes translate HTTP requests into service calls; SQLAlchemy models represent the persisted data.
+- `User` is shared identity, created through `app/auth`. Domain 2 reads it only to list household members and show usernames.
 
-The database contains four tables:
+### Architecture diagram
 
-- `user`: username and password hash.
-- `task`: creator, optional assignee and due date, difficulty, status, and completion time.
-- `booking`: resource, start and end times, and creator.
-- `contribution_score`: per-user calculation-period metrics and calculation timestamp.
+```mermaid
+flowchart TB
+    browser["Browser<br/>(server-rendered HTML forms)"]
+
+    subgraph process["Single Flask process: python app.py (create_app, 0.0.0.0:PORT)"]
+        direction TB
+
+        subgraph routes["HTTP layer: blueprints"]
+            auth_routes["auth/routes.py<br/>/register, /login, /logout"]
+            d1_routes["domain1/routes.py<br/>/tasks, /bookings"]
+            d2_routes["domain2/routes.py<br/>/fairness, /fairness/recalculate"]
+        end
+
+        time_utils["time_utils.py<br/>local time to UTC conversion"]
+
+        subgraph d1["Domain 1: Household coordination"]
+            d1_services["domain1/services.py<br/>create_task, claim_task, mark_complete,<br/>create_booking, update_booking, ..."]
+            d1_rules["domain1/rules.py<br/>validate_title, validate_difficulty,<br/>validate_booking"]
+        end
+
+        subgraph d2["Domain 2: Contribution analytics"]
+            d2_services["domain2/services.py<br/>calculate_fairness"]
+            d2_calc["domain2/calculations.py<br/>task_weight,<br/>calculate_contribution_percentages"]
+        end
+
+        subgraph models["models/ (Flask-SQLAlchemy)"]
+            user_model["User"]
+            task_model["Task"]
+            booking_model["Booking"]
+            score_model["ContributionScore"]
+        end
+    end
+
+    sqlite[("SQLite<br/>DATA_DIR/app.db")]
+
+    browser -->|"HTTP + session cookie + CSRF token"| routes
+    auth_routes --> user_model
+    d1_routes --> time_utils
+    d1_routes -->|"usernames for display"| user_model
+    d1_routes --> d1_services
+    d1_services --> d1_rules
+    d1_services --> task_model
+    d1_services --> booking_model
+    d2_routes --> d2_services
+    d2_routes -->|"latest snapshot per user"| score_model
+    d2_services --> d2_calc
+    d2_services -->|"list household members"| user_model
+    d2_services --> score_model
+    d2_services ==>|"SERVICE SEAM<br/>get_completed_task_contributions<br/>get_booking_contributions<br/>get_overdue_task_counts"| d1_services
+    models --> sqlite
+```
+
+Domain 2 never queries `Task` or `Booking` directly. It receives plain dictionaries from the three seam functions in `domain1/services.py`. If the domains are split into separate services later, those function calls are where HTTP calls would go.
+
+### Database diagram
+
+The database contains four tables. Domain 1 owns `task` and `booking`, Domain 2 owns `contribution_score`, and `user` is shared identity.
+
+```mermaid
+erDiagram
+    user ||--o{ task : "creates (created_by)"
+    user |o--o{ task : "is assigned (assigned_to)"
+    user ||--o{ booking : "creates (created_by)"
+    user ||--o{ contribution_score : "has snapshots (user_id)"
+
+    user {
+        INTEGER id PK
+        VARCHAR username UK "80 chars, NOT NULL"
+        VARCHAR password_hash "255 chars, NOT NULL"
+    }
+
+    task {
+        INTEGER id PK
+        VARCHAR title "200 chars, NOT NULL"
+        TEXT description "NULL"
+        VARCHAR difficulty "20 chars, NOT NULL, easy/medium/hard"
+        VARCHAR status "20 chars, NOT NULL, pending/done"
+        INTEGER assigned_to FK "NULL, user.id"
+        INTEGER created_by FK "NOT NULL, user.id"
+        DATETIME due_date "NULL, stored in UTC"
+        DATETIME created_at "NOT NULL, UTC"
+        DATETIME completed_at "NULL, UTC"
+    }
+
+    booking {
+        INTEGER id PK
+        VARCHAR resource "120 chars, NOT NULL, laundry/kitchen/living_room"
+        DATETIME start_time "NOT NULL, UTC"
+        DATETIME end_time "NOT NULL, UTC"
+        INTEGER created_by FK "NOT NULL, user.id"
+        DATETIME created_at "NOT NULL, UTC"
+    }
+
+    contribution_score {
+        INTEGER id PK
+        INTEGER user_id FK "NOT NULL, user.id"
+        DATE period_start "NOT NULL"
+        DATE period_end "NOT NULL"
+        INTEGER tasks_completed "NOT NULL"
+        FLOAT weighted_score "NOT NULL"
+        INTEGER bookings_count "NOT NULL"
+        INTEGER overdue_tasks "NULL"
+        FLOAT contribution_score "NOT NULL"
+        DATETIME calculated_at "NOT NULL, UTC"
+    }
+```
+
+`difficulty` and `status` are enforced by SQLite `CHECK` constraints (`ck_task_difficulty`, `ck_task_status`). The allowed `resource` values are enforced in `domain1/rules.py`, not in the database. The models declare no SQLAlchemy relationship properties; the links above are the foreign-key columns only.
 
 ## Task lifecycle
 
