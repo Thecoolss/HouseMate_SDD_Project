@@ -1,7 +1,13 @@
-from datetime import timezone
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from flask import current_app
+
+
+def utc_now():
+    # Timestamps are stored as naive UTC values, so drop tzinfo after reading the aware UTC time.
+    # This replaces the deprecated datetime.utcnow() and returns the same kind of value.
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def local_to_utc_naive(value):

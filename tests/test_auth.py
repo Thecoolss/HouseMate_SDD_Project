@@ -47,6 +47,20 @@ def test_successful_registration(client, app):
         assert User.query.filter_by(username="alice").count() == 1
 
 
+def test_empty_password_registration_rejected(client, app):
+    # Regression test: a direct POST bypasses the form's "required" attribute.
+    response = _register(client, "alice", password="")
+
+    assert response.status_code == 200
+    assert "password is required" in response.get_data(as_text=True).lower()
+
+    with app.app_context():
+        assert User.query.filter_by(username="alice").count() == 0
+
+    with client.session_transaction() as session:
+        assert "_user_id" not in session
+
+
 def test_duplicate_username_rejection(client, app):
     _create_user(app, "alice", "secret123")
 

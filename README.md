@@ -159,6 +159,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
+On Debian or Ubuntu, if `python3 -m venv` reports that `ensurepip` is not available, install the venv module first (for example `sudo apt install python3.11-venv`, matching your Python version).
+
 On Windows PowerShell, activate it with:
 
 ```powershell
@@ -218,7 +220,7 @@ Coverage is reported two ways: for the complete application, and for the core bu
 pytest --cov=app --cov-report=term-missing
 ```
 
-**Measured on 2026-10-09:** 64 tests passed; whole-application coverage was **72%**. This figure also counts Flask routes, app setup, and the timezone helpers in `app/time_utils.py`.
+**Measured on 2026-10-09:** 65 tests passed; whole-application coverage was **72%**. This figure also counts Flask routes, app setup, and the timezone helpers in `app/time_utils.py`.
 
 ### Core business-logic coverage (Domain 1 and Domain 2)
 
@@ -231,7 +233,7 @@ pytest \
   --cov-report=term-missing
 ```
 
-**Measured on 2026-10-09:** 64 tests passed, with **93% combined coverage** across these four modules.
+**Measured on 2026-10-09:** 65 tests passed, with **93% combined coverage** across these four modules.
 
 Coverage can change as the code and tests change; rerun both commands before submitting and update these results if they differ.
 

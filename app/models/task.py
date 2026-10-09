@@ -1,6 +1,5 @@
-from datetime import datetime
-
 from app import db
+from app.time_utils import utc_now
 
 
 class Task(db.Model):
@@ -12,7 +11,7 @@ class Task(db.Model):
     assigned_to = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     due_date = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
     completed_at = db.Column(db.DateTime, nullable=True)
 
     __table_args__ = (

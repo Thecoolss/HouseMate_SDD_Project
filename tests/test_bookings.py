@@ -1,10 +1,11 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
 from app import db
 from app.domain1 import services
 from app.models import User
+from app.time_utils import utc_now
 
 
 def _make_user(app, username):
@@ -21,7 +22,7 @@ def test_create_valid_booking(app):
 
     with app.app_context():
         user = db.session.get(User, user_id)
-        start = datetime.utcnow()
+        start = utc_now()
         end = start + timedelta(hours=2)
         booking = services.create_booking(user, "laundry", start, end)
 
@@ -35,7 +36,7 @@ def test_invalid_booking_time_range_rejected(app):
 
     with app.app_context():
         user = db.session.get(User, user_id)
-        start = datetime.utcnow()
+        start = utc_now()
         end = start
 
         with pytest.raises(ValueError):
@@ -47,7 +48,7 @@ def test_overlapping_booking_rejected(app):
 
     with app.app_context():
         user = db.session.get(User, user_id)
-        start = datetime.utcnow()
+        start = utc_now()
         end = start + timedelta(hours=2)
         services.create_booking(user, "laundry", start, end)
 
@@ -60,7 +61,7 @@ def test_adjacent_bookings_allowed(app):
 
     with app.app_context():
         user = db.session.get(User, user_id)
-        start = datetime.utcnow()
+        start = utc_now()
         end = start + timedelta(hours=1)
         services.create_booking(user, "laundry", start, end)
 
@@ -76,7 +77,7 @@ def test_creator_can_update_booking(app):
 
     with app.app_context():
         user = db.session.get(User, user_id)
-        start = datetime.utcnow()
+        start = utc_now()
         end = start + timedelta(hours=1)
         booking = services.create_booking(user, "laundry", start, end)
 
@@ -96,7 +97,7 @@ def test_non_creator_cannot_update_booking(app):
     with app.app_context():
         creator = db.session.get(User, creator_id)
         other_user = db.session.get(User, other_user_id)
-        start = datetime.utcnow()
+        start = utc_now()
         end = start + timedelta(hours=1)
         booking = services.create_booking(creator, "laundry", start, end)
 
@@ -109,7 +110,7 @@ def test_creator_can_delete_booking(app):
 
     with app.app_context():
         user = db.session.get(User, user_id)
-        start = datetime.utcnow()
+        start = utc_now()
         end = start + timedelta(hours=1)
         booking = services.create_booking(user, "laundry", start, end)
         services.delete_booking(user, booking.id)
@@ -124,7 +125,7 @@ def test_non_creator_cannot_delete_booking(app):
     with app.app_context():
         creator = db.session.get(User, creator_id)
         other_user = db.session.get(User, other_user_id)
-        start = datetime.utcnow()
+        start = utc_now()
         end = start + timedelta(hours=1)
         booking = services.create_booking(creator, "laundry", start, end)
 

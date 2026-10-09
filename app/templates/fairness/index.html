@@ -44,7 +44,7 @@
                 <td>{{ score.bookings_count }}</td>
                 <td>{{ score.overdue_tasks if score.overdue_tasks is not none else "Not recorded" }}</td>
                 <td>{{ "%.2f%%"|format(score.contribution_score) }}</td>
-                <td>{{ score.calculated_at.strftime("%b %d, %Y %H:%M UTC") }}</td>
+                <td>{{ score.calculated_at|localdatetime("%b %d, %Y %H:%M") }}</td>
               {% else %}
                 <td colspan="7" class="not-calculated">No calculation yet</td>
               {% endif %}

@@ -11,6 +11,7 @@ from app.domain2.calculations import (
     task_weight,
 )
 from app.models import ContributionScore, User
+from app.time_utils import utc_now
 
 
 def calculate_fairness(period_start, period_end, calculated_at=None):
@@ -19,7 +20,7 @@ def calculate_fairness(period_start, period_end, calculated_at=None):
     if period_start > period_end:
         raise ValueError("The contribution period is invalid.")
 
-    calculated_at = calculated_at or datetime.utcnow()
+    calculated_at = calculated_at or utc_now()
     if not isinstance(calculated_at, datetime):
         raise ValueError("The calculation time is invalid.")
 

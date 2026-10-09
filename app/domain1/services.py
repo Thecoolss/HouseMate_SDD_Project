@@ -9,6 +9,7 @@ from app.domain1.rules import (
     validate_title,
 )
 from app.models import Booking, Task
+from app.time_utils import utc_now
 
 
 _UNCHANGED = object()
@@ -99,7 +100,7 @@ def mark_complete(user, task_id):
         raise PermissionError("Only the assignee can complete this task.")
 
     task.status = "done"
-    task.completed_at = datetime.utcnow()
+    task.completed_at = utc_now()
     db.session.commit()
     return task
 

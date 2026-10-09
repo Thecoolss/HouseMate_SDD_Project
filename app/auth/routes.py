@@ -19,6 +19,12 @@ def register():
             flash("Username is required.", "error")
             return render_template("auth/register.html")
 
+        # The form's "required" attribute only stops browsers; a direct POST can still send an
+        # empty password, so the server must reject it too.
+        if not password:
+            flash("Password is required.", "error")
+            return render_template("auth/register.html")
+
         if User.query.filter_by(username=username).first():
             flash("That username is already taken.", "error")
             return render_template("auth/register.html")

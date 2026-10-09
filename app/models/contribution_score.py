@@ -1,6 +1,5 @@
-from datetime import datetime
-
 from app import db
+from app.time_utils import utc_now
 
 
 class ContributionScore(db.Model):
@@ -15,4 +14,4 @@ class ContributionScore(db.Model):
     bookings_count = db.Column(db.Integer, nullable=False, default=0)
     overdue_tasks = db.Column(db.Integer, nullable=True)
     contribution_score = db.Column(db.Float, nullable=False, default=0.0)
-    calculated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    calculated_at = db.Column(db.DateTime, nullable=False, default=utc_now)

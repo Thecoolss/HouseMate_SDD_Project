@@ -1,6 +1,5 @@
-from datetime import datetime
-
 from app import db
+from app.time_utils import utc_now
 
 
 class Booking(db.Model):
@@ -9,4 +8,4 @@ class Booking(db.Model):
     start_time = db.Column(db.DateTime, nullable=False)
     end_time = db.Column(db.DateTime, nullable=False)
     created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utc_now)

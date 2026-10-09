@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from flask import flash, redirect, render_template, url_for
 from flask_login import login_required
@@ -7,6 +7,7 @@ from app import db
 from app.domain2 import bp
 from app.domain2.services import calculate_fairness
 from app.models import ContributionScore, User
+from app.time_utils import utc_now
 
 
 @bp.get("/fairness")
@@ -45,7 +46,7 @@ def fairness():
 @bp.post("/fairness/recalculate")
 @login_required
 def recalculate_fairness():
-    calculated_at = datetime.utcnow()
+    calculated_at = utc_now()
     period_start = calculated_at - timedelta(days=30)
     scores = calculate_fairness(period_start, calculated_at, calculated_at=calculated_at)
     flash(f"Contribution snapshots recalculated for {len(scores)} household members.", "success")

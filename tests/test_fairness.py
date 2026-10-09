@@ -1,9 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from app import db
 from app.domain1 import services
 from app.domain2.services import calculate_fairness
 from app.models import ContributionScore, User
+from app.time_utils import utc_now
 
 
 def _make_user(app, username):
@@ -24,7 +25,7 @@ def test_calculate_fairness_and_keep_historical_snapshots(app):
         alice = db.session.get(User, alice_id)
         bob = db.session.get(User, bob_id)
         charlie = db.session.get(User, charlie_id)
-        now = datetime.utcnow()
+        now = utc_now()
         period_start = now - timedelta(days=10)
         period_end = now + timedelta(days=10)
 

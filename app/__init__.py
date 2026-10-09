@@ -32,8 +32,10 @@ def create_app(test_config=None):
     login_manager.init_app(app)
     csrf.init_app(app)
 
-    # These imports register the packages so SQLAlchemy and the auth blueprint are available.
-    from app.models import __init__
+    # Importing the models package registers every model with SQLAlchemy before create_all().
+    # "import app.models" is not used here because it would rebind the local name "app"
+    # (the Flask instance) to the app package.
+    from app import models  # noqa: F401
     from app.auth import bp as auth_bp
     from app.domain1 import bp as domain1_bp
     from app.domain2 import bp as domain2_bp
