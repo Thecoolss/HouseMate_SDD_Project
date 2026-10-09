@@ -105,15 +105,17 @@ Run the test suite:
 pytest
 ```
 
-Measure coverage across the complete application:
+Coverage is reported two ways: for the complete application, and for the core business logic of the two domains, which is what the 70% target applies to.
+
+### Whole-application coverage
 
 ```bash
 pytest --cov=app --cov-report=term-missing
 ```
 
-**Measured on 2026-10-06:** 50 tests passed; whole-application coverage was **69%**. This includes Flask routes and timezone utilities as well as business logic, and is below 70% if the target is interpreted as whole-application coverage.
+**Measured on 2026-10-09:** 64 tests passed; whole-application coverage was **72%**. This figure also counts Flask routes, app setup, and the timezone helpers in `app/time_utils.py`.
 
-The assignment's coverage requirement specifically concerns the core business logic. To measure the domain service and pure-rule modules:
+### Core business-logic coverage (Domain 1 and Domain 2)
 
 ```bash
 pytest \
@@ -124,7 +126,9 @@ pytest \
   --cov-report=term-missing
 ```
 
-**Measured on 2026-10-06:** the 50-test suite passed, with **93% combined coverage** across these four modules. Coverage can change as the code and tests change; rerun the command before submitting and update these results if they differ.
+**Measured on 2026-10-09:** 64 tests passed, with **93% combined coverage** across these four modules.
+
+Coverage can change as the code and tests change; rerun both commands before submitting and update these results if they differ.
 
 ## Project structure
 
@@ -137,7 +141,7 @@ app/
   templates/   Server-rendered HTML templates
   static/      CSS
 tests/
-  unit/        Isolated tests for pure validation and calculation functions
+  unit/        Isolated tests for pure validation, calculation, and timezone functions
   test_*.py    Database-backed service tests and Flask authentication tests
 ADR.md         Architecture decision record log
 AI_USAGE.md   Log of meaningful AI-assisted work
