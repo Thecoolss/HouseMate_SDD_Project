@@ -142,6 +142,7 @@ Completed tasks contribute points according to difficulty: easy = 1, medium = 2,
 
 - Python 3.11 or newer
 - Packages listed in the root `requirements.txt`
+- Docker, only if you run the app in a container
 
 ## Setup
 
@@ -175,14 +176,16 @@ python -m pip install -r requirements.txt
 
 ## Configuration
 
-Set environment variables to change application settings without editing source code.
+Set environment variables to change application settings without editing source code. These are every setting the application reads. The Docker image sets its own defaults for `PORT` and `DATA_DIR` (the values the provided container template requires).
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `PORT` | `5000` | Port used by the Flask development server. |
-| `DATA_DIR` | `./data` | Directory where the SQLite database `app.db` is stored. The directory is created if needed. |
-| `SECRET_KEY` | `dev-secret` | Flask session and CSRF signing key. Set a private, strong value outside local development. |
-| `HOUSEHOLD_TIMEZONE` | `Europe/Paris` | Timezone used to interpret and display household date-times. |
+| Variable | Default (`python app.py`) | Default (Docker image) | Purpose |
+| --- | --- | --- | --- |
+| `PORT` | `5000` | `8000` | Port the server listens on. |
+| `DATA_DIR` | `./data` | `/data` | Directory where the SQLite database `app.db` is stored. The directory is created if needed. |
+| `SECRET_KEY` | `dev-secret` | `dev-secret` | Flask session and CSRF signing key. Set a private, strong value outside local development. |
+| `HOUSEHOLD_TIMEZONE` | `Europe/Paris` | `Europe/Paris` | Timezone used to interpret and display household date-times. |
+
+**SQLite path:** `$DATA_DIR/app.db`, so `./data/app.db` when run directly and `/data/app.db` in the container. The schema is created automatically on first start (`db.create_all()`), which only creates missing tables and never drops or changes existing data. There is no seed data.
 
 For example, on Linux or macOS:
 
@@ -196,13 +199,63 @@ The default secret key is for local development only.
 
 ## Run
 
-From the repository root, start the application with:
+### Directly on a machine
+
+From the repository root, after the setup steps above, start the application with:
 
 ```bash
 python app.py
 ```
 
 The application binds to `0.0.0.0` and defaults to port `5000`. Open <http://localhost:5000/register> to register the first user.
+
+### With Docker
+
+The `Dockerfile` at the repository root is the provided course template with its four `TODO` lines filled in: `python:3.12-slim`, `pip install -r requirements.txt`, an explicit copy of `app.py`, `config.py`, and `app/`, and `python app.py` as the start command. Tests, the virtual environment, `.git`, and local data are not copied into the image.
+
+Build the image and run it with a named volume for the database:
+
+```bash
+docker build -t housemate .
+docker run -p 8000:8000 -v housemate-data:/data housemate
+```
+
+Open <http://localhost:8000/register>. The database lives in the `housemate-data` volume at `/data/app.db`, so it survives the container being removed and recreated.
+
+To use another port or set a real secret key:
+
+```bash
+docker run -e PORT=9000 -p 9000:9000 -e SECRET_KEY="replace-with-a-private-random-value" -v housemate-data:/data housemate
+```
+
+### Container contract evidence (§7)
+
+Output of the provided checker, `container/run.sh`, run against this repository on 2026-10-10:
+
+```text
+=== SDD Assignment 1 contract check ===
+Repository: /home/coolss/Uni_Projects/sdd/House_Project
+==> Repository shape
+  PASS  one Dockerfile, one manifest (requirements.txt)
+==> Build from a clean context, no build args
+  PASS  image built
+  PASS  image size 60 MB
+==> Start on PORT=8000 and reach it from the host
+  PASS  HTTP 302 from http://localhost:8000/
+==> SQLite file under DATA_DIR
+  PASS  found in /data: app.db 
+==> Data persists, and a second boot does not re-seed
+  PASS  volume at /data persists
+  PASS  row counts unchanged across restart: booking=0 contribution_score=0 task=0 user=0 
+==> PORT override is honoured (not hardcoded)
+  PASS  HTTP 302 from http://localhost:9123/
+=== ALL CHECKS PASSED ===
+
+```
+
+`HTTP 302` is expected: `/` redirects anonymous users to `/login`.
+
+When running the checker from WSL, set `NAME` explicitly (for example `NAME=sdd-housemate ./run.sh .`), because WSL sets `NAME` to the Windows host name, which is not a valid image tag.
 
 ## Tests and coverage
 
@@ -250,6 +303,10 @@ app/
 tests/
   unit/        Isolated tests for pure validation, calculation, and timezone functions
   test_*.py    Database-backed service tests and Flask authentication tests
+app.py         Entry point: python app.py
+config.py      Environment-variable configuration
+Dockerfile     Provided container template with its four TODOs filled in
+requirements.txt  Pinned dependencies (the one manifest)
 ADR.md         Architecture decision record log
-AI_USAGE.md   Log of meaningful AI-assisted work
+AI_USAGE.md    Log of meaningful AI-assisted work
 ```
