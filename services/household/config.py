@@ -8,6 +8,9 @@ class Config:
     PORT = int(os.environ.get("PORT", 5000))
     DATA_DIR = Path(os.environ.get("DATA_DIR", "./data")).resolve()
     HOUSEHOLD_TIMEZONE = os.environ.get("HOUSEHOLD_TIMEZONE", "Europe/Paris")
+    # Location of the fairness service, read from the environment (no hardcoded host/port,
+    # Assignment 2 §1a). Used for the cross-service nav link until the UI goes static on day 4.
+    FAIRNESS_URL = os.environ.get("FAIRNESS_URL", "http://localhost:5001/fairness")
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{DATA_DIR / 'app.db'}"

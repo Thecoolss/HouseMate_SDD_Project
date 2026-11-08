@@ -6,7 +6,10 @@ class ContributionScore(db.Model):
     __tablename__ = "contribution_score"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    # DAY-1 SPLIT: the user lives in the household service's database, so this is now a
+    # plain id, not a foreign key across the seam (Assignment 2 §2). Referential
+    # integrity is enforced in code / by the household service, not by the database.
+    user_id = db.Column(db.Integer, nullable=False)
     period_start = db.Column(db.Date, nullable=False)
     period_end = db.Column(db.Date, nullable=False)
     tasks_completed = db.Column(db.Integer, nullable=False, default=0)

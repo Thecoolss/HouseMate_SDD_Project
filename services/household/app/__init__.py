@@ -38,11 +38,9 @@ def create_app(test_config=None):
     from app import models  # noqa: F401
     from app.auth import bp as auth_bp
     from app.domain1 import bp as domain1_bp
-    from app.domain2 import bp as domain2_bp
 
     app.register_blueprint(auth_bp, url_prefix="")
     app.register_blueprint(domain1_bp, url_prefix="")
-    app.register_blueprint(domain2_bp, url_prefix="")
 
     @app.get("/")
     def home():
@@ -52,6 +50,12 @@ def create_app(test_config=None):
             return redirect(url_for("domain1.list_tasks"))
         return redirect(url_for("auth.login"))
     app.add_template_filter(format_local_datetime, "localdatetime")
+
+    @app.context_processor
+    def inject_cross_service_urls():
+        # The fairness page is served by a separate service after the split; expose its
+        # URL to templates so the nav link does not depend on a fairness route existing here.
+        return {"fairness_url": app.config["FAIRNESS_URL"]}
 
     with app.app_context():
         db.create_all()
