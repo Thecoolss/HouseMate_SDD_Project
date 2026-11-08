@@ -1,9 +1,13 @@
 assignment_1.md
+assignment_2.md
 Plan.md
 venv/
+.venv/
 __pycache__/
 *.db
 .coverage
 htmlcov/
+.pytest_cache/
 data/
 .env
+*Zone.Identifier

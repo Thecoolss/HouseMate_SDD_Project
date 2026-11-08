@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from app import db
-from app.domain1.services import (
+from app.seam import (
     get_booking_contributions,
     get_completed_task_contributions,
     get_overdue_task_counts,
