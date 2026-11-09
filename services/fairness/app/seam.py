@@ -1,37 +1,57 @@
-"""Seam between the fairness service and the household service.
+"""Seam between the fairness service and the household service (ADR-2, ADR-6).
 
-These three functions are the ONLY things the fairness domain needs from the
-household domain (see ADR-2 and ADR-6). In the Assignment 1 monolith they lived
-in ``app.domain1.services`` and ran SQL against the Task and Booking tables.
-
-After the split those tables belong to the household service and its database,
-which the fairness service cannot touch. On day 2 each function below becomes an
-HTTP call to the household service (e.g. ``GET /internal/contributions``), with a
-timeout and a designed failure, and the responses are plain JSON shaped exactly
-like the dicts these functions used to return.
-
-Day 1 is the mechanical split only: the functions are declared with their final
-signatures so the domain2 logic and ADR-6 can reference a stable seam, but they
-are not wired yet.
+Fairness never touches household's database. Everything it needs from the household
+domain comes through the two functions below, which call household's internal HTTP
+endpoints with a timeout and turn any transport or HTTP failure into HouseholdUnavailable.
 """
 
+from datetime import datetime
 
-def get_completed_task_contributions(period_start, period_end):
-    """One dict per completed task in the period: {user_id, difficulty, completed_at}."""
-    raise NotImplementedError(
-        "Wired to the household service over HTTP on day 2 (GET /internal/contributions)."
+import httpx
+from flask import current_app
+
+
+class HouseholdUnavailable(RuntimeError):
+    """The household service could not be reached or returned an error."""
+
+
+def _get_json(path, params=None):
+    try:
+        response = httpx.get(
+            current_app.config["HOUSEHOLD_URL"] + path,
+            params=params,
+            timeout=current_app.config["HOUSEHOLD_TIMEOUT_S"],
+        )
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as error:
+        raise HouseholdUnavailable(
+            f"The household service returned status {error.response.status_code}."
+        ) from error
+    except httpx.HTTPError as error:
+        raise HouseholdUnavailable("The household service is unavailable.") from error
+
+
+def get_members():
+    """Household members as [{id, username}]."""
+    return _get_json("/internal/users")
+
+
+def get_contributions(period_start, period_end, calculated_at):
+    """Contribution data for the period, as one dict with three lists.
+
+    completed_tasks: [{user_id, difficulty, completed_at}]
+    bookings:        [{user_id}]
+    overdue:         [{user_id, overdue_tasks}]
+    """
+    data = _get_json(
+        "/internal/contributions",
+        params={
+            "start": period_start.isoformat(),
+            "end": period_end.isoformat(),
+            "as_of": calculated_at.isoformat(),
+        },
     )
-
-
-def get_booking_contributions(period_start, period_end):
-    """One dict per booking that starts in the period: {user_id}."""
-    raise NotImplementedError(
-        "Wired to the household service over HTTP on day 2 (GET /internal/contributions)."
-    )
-
-
-def get_overdue_task_counts(calculated_at):
-    """One dict per user with overdue pending tasks: {user_id, overdue_tasks}."""
-    raise NotImplementedError(
-        "Wired to the household service over HTTP on day 2 (GET /internal/contributions)."
-    )
+    for task in data["completed_tasks"]:
+        task["completed_at"] = datetime.fromisoformat(task["completed_at"])
+    return data

@@ -1,16 +1,12 @@
 from datetime import datetime
 
 from app import db
-from app.seam import (
-    get_booking_contributions,
-    get_completed_task_contributions,
-    get_overdue_task_counts,
-)
+from app.seam import get_contributions, get_members
 from app.domain2.calculations import (
     calculate_contribution_percentages,
     task_weight,
 )
-from app.models import ContributionScore, User
+from app.models import ContributionScore
 from app.time_utils import utc_now
 
 
@@ -24,36 +20,39 @@ def calculate_fairness(period_start, period_end, calculated_at=None):
     if not isinstance(calculated_at, datetime):
         raise ValueError("The calculation time is invalid.")
 
-    users = User.query.order_by(User.id.asc()).all()
-    task_counts = {user.id: 0 for user in users}
-    weighted_scores = {user.id: 0 for user in users}
-    bookings_counts = {user.id: 0 for user in users}
-    overdue_counts = {user.id: 0 for user in users}
+    # Both reads come from the household service over HTTP (see app/seam.py).
+    user_ids = [member["id"] for member in get_members()]
+    contributions = get_contributions(period_start, period_end, calculated_at)
 
-    for contribution in get_completed_task_contributions(period_start, period_end):
+    task_counts = {user_id: 0 for user_id in user_ids}
+    weighted_scores = {user_id: 0 for user_id in user_ids}
+    bookings_counts = {user_id: 0 for user_id in user_ids}
+    overdue_counts = {user_id: 0 for user_id in user_ids}
+
+    for contribution in contributions["completed_tasks"]:
         user_id = contribution["user_id"]
         task_counts[user_id] += 1
         weighted_scores[user_id] += task_weight(contribution["difficulty"])
 
-    for contribution in get_booking_contributions(period_start, period_end):
+    for contribution in contributions["bookings"]:
         bookings_counts[contribution["user_id"]] += 1
 
-    for contribution in get_overdue_task_counts(calculated_at):
+    for contribution in contributions["overdue"]:
         overdue_counts[contribution["user_id"]] = contribution["overdue_tasks"]
 
     percentages = calculate_contribution_percentages(weighted_scores, bookings_counts)
 
     scores = []
-    for user in users:
+    for user_id in user_ids:
         score = ContributionScore(
-            user_id=user.id,
+            user_id=user_id,
             period_start=period_start.date(),
             period_end=period_end.date(),
-            tasks_completed=task_counts[user.id],
-            weighted_score=weighted_scores[user.id],
-            bookings_count=bookings_counts[user.id],
-            overdue_tasks=overdue_counts[user.id],
-            contribution_score=percentages[user.id],
+            tasks_completed=task_counts[user_id],
+            weighted_score=weighted_scores[user_id],
+            bookings_count=bookings_counts[user_id],
+            overdue_tasks=overdue_counts[user_id],
+            contribution_score=percentages[user_id],
             calculated_at=calculated_at,
         )
         db.session.add(score)

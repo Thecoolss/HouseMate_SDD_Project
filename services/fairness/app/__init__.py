@@ -12,19 +12,11 @@ login_manager = LoginManager()
 csrf = CSRFProtect()
 
 
-@login_manager.user_loader
-def load_user(user_id):
-    from app.models import User
-
-    return db.session.get(User, int(user_id))
-
-
 def create_app(test_config=None):
     app = Flask(__name__)
     app.config.from_object(Config)
     if test_config is not None:
         app.config.from_mapping(test_config)
-    login_manager.login_view = "auth.login"
 
     db.init_app(app)
     login_manager.init_app(app)
