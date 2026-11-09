@@ -36,7 +36,7 @@
         <tbody>
           {% for user, score in rows %}
             <tr>
-              <th scope="row">{{ user.username }}</th>
+              <th scope="row">{{ user["username"] }}</th>
               {% if score %}
                 <td>{{ score.period_start.strftime("%b %d, %Y") }} - {{ score.period_end.strftime("%b %d, %Y") }}</td>
                 <td>{{ score.tasks_completed }}</td>

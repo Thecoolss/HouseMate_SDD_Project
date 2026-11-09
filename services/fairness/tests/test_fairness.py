@@ -4,18 +4,17 @@ import pytest
 
 from app import db
 from app.domain2.services import calculate_fairness
-from app.models import ContributionScore, User
+from app.models import ContributionScore
 from app.time_utils import utc_now
 
-# DAY-1 SPLIT: this worked example seeds its data by driving the HOUSEHOLD domain
-# (create_task / claim / complete / create_booking), which no longer lives in this
-# service. It becomes the day-5 cross-seam integration test: it will run against the
-# household service (live over compose, or a stub) once the seam in app/seam.py is
-# wired to HTTP on day 2. Skipped until then so the fairness suite stays green.
+# DAY-2 WIRE: this worked example seeds its data by driving the HOUSEHOLD domain
+# (create_task / claim / complete / create_booking), which lives in a separate service.
+# It becomes the cross-seam integration test: it will run against the household service
+# (live over compose, or a stub). Skipped until then so the fairness suite stays green.
 pytestmark = pytest.mark.skip(
-    reason="cross-service; becomes the day-5 cross-seam integration test once app/seam.py is wired (day 2)"
+    reason="cross-service; becomes the cross-seam integration test running against household over compose or a stub"
 )
-services = None  # provided by the household service on day 5
+services = None  # provided by the household service
 
 
 def _make_user(app, username):

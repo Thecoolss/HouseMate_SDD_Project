@@ -8,6 +8,10 @@ class Config:
     PORT = int(os.environ.get("PORT", 5000))
     DATA_DIR = Path(os.environ.get("DATA_DIR", "./data")).resolve()
     HOUSEHOLD_TIMEZONE = os.environ.get("HOUSEHOLD_TIMEZONE", "Europe/Paris")
+    # Location of the household service for cross-seam calls (Assignment 2 §1a).
+    HOUSEHOLD_URL = os.environ.get("HOUSEHOLD_URL", "http://localhost:5000")
+    # Timeout for HTTP calls to household (seconds).
+    HOUSEHOLD_TIMEOUT_S = float(os.environ.get("HOUSEHOLD_TIMEOUT_S", 5.0))
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{DATA_DIR / 'app.db'}"

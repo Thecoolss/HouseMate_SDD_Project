@@ -38,9 +38,11 @@ def create_app(test_config=None):
     from app import models  # noqa: F401
     from app.auth import bp as auth_bp
     from app.domain1 import bp as domain1_bp
+    from app.internal import bp as internal_bp
 
     app.register_blueprint(auth_bp, url_prefix="")
     app.register_blueprint(domain1_bp, url_prefix="")
+    app.register_blueprint(internal_bp, url_prefix="/internal")
 
     @app.get("/")
     def home():
