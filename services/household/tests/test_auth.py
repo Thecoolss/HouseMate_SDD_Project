@@ -1,3 +1,5 @@
+from sqlalchemy.pool import StaticPool
+
 from app import create_app, db
 from app.models import User
 
@@ -7,10 +9,10 @@ def test_create_app_allows_test_database_override(tmp_path):
     app = create_app(
         {
             "TESTING": True,
-            "WTF_CSRF_ENABLED": False,
+            "AUTH_SECRET": "test-auth-secret",
             "SQLALCHEMY_DATABASE_URI": f"sqlite:///{test_db}",
             "SQLALCHEMY_ENGINE_OPTIONS": {
-                "poolclass": __import__("sqlalchemy.pool").pool.StaticPool,
+                "poolclass": StaticPool,
                 "connect_args": {"check_same_thread": False},
             },
         }
@@ -22,11 +24,11 @@ def test_create_app_allows_test_database_override(tmp_path):
 
 
 def _register(client, username, password="secret123"):
-    return client.post(
-        "/register",
-        data={"username": username, "password": password},
-        follow_redirects=True,
-    )
+    return client.post("/register", json={"username": username, "password": password})
+
+
+def _login(client, username, password="secret123"):
+    return client.post("/login", json={"username": username, "password": password})
 
 
 def _create_user(app, username, password="secret123"):
@@ -37,98 +39,74 @@ def _create_user(app, username, password="secret123"):
         db.session.commit()
 
 
-def test_successful_registration(client, app):
+def test_successful_registration_returns_token(client, app):
     response = _register(client, "alice")
 
-    assert response.status_code == 200
-    assert "create the first task" in response.get_data(as_text=True).lower()
+    assert response.status_code == 201
+    body = response.get_json()
+    assert body["token"]
+    assert body["user"]["username"] == "alice"
 
     with app.app_context():
         assert User.query.filter_by(username="alice").count() == 1
 
 
 def test_empty_password_registration_rejected(client, app):
-    # Regression test: a direct POST bypasses the form's "required" attribute.
+    # Regression test: the UI marks the field required, but a direct request can still omit it.
     response = _register(client, "alice", password="")
 
-    assert response.status_code == 200
-    assert "password is required" in response.get_data(as_text=True).lower()
+    assert response.status_code == 400
+    assert "password is required" in response.get_json()["error"].lower()
 
     with app.app_context():
         assert User.query.filter_by(username="alice").count() == 0
 
-    with client.session_transaction() as session:
-        assert "_user_id" not in session
-
 
 def test_duplicate_username_rejection(client, app):
-    _create_user(app, "alice", "secret123")
-
-    with client.session_transaction() as session:
-        session.clear()
+    _create_user(app, "alice")
 
     response = _register(client, "alice")
 
-    assert response.status_code == 200
-    assert "already taken" in response.get_data(as_text=True).lower()
+    assert response.status_code == 409
+    assert "already taken" in response.get_json()["error"].lower()
 
 
-def test_successful_login(client, app):
-    _create_user(app, "alice", "secret123")
+def test_successful_login_returns_token(client, app):
+    _create_user(app, "alice")
 
-    response = client.post(
-        "/login",
-        data={"username": "alice", "password": "secret123"},
-        follow_redirects=True,
-    )
+    response = _login(client, "alice")
 
     assert response.status_code == 200
-    assert "create the first task" in response.get_data(as_text=True).lower()
+    assert response.get_json()["token"]
 
 
 def test_wrong_password_rejection(client, app):
-    _create_user(app, "alice", "secret123")
+    _create_user(app, "alice")
 
-    response = client.post(
-        "/login",
-        data={"username": "alice", "password": "wrong-password"},
-        follow_redirects=True,
-    )
+    response = _login(client, "alice", password="wrong-password")
+
+    assert response.status_code == 401
+    assert "invalid username or password" in response.get_json()["error"].lower()
+
+
+def test_protected_route_requires_token(client):
+    assert client.get("/tasks").status_code == 401
+
+
+def test_protected_route_rejects_tampered_token(client, app):
+    _create_user(app, "alice")
+    token = _login(client, "alice").get_json()["token"]
+
+    response = client.get("/tasks", headers={"Authorization": f"Bearer {token}x"})
+
+    assert response.status_code == 401
+
+
+def test_protected_route_accepts_valid_token(client, app):
+    _create_user(app, "alice")
+    token = _login(client, "alice").get_json()["token"]
+
+    response = client.get("/tasks", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200
-    assert "invalid username or password" in response.get_data(as_text=True).lower()
-
-
-def test_logout(client, app):
-    _create_user(app, "alice", "secret123")
-    client.post(
-        "/login",
-        data={"username": "alice", "password": "secret123"},
-        follow_redirects=True,
-    )
-
-    response = client.post("/logout", follow_redirects=True)
-
-    assert response.status_code == 200
-    assert "login" in response.get_data(as_text=True).lower()
-
-    with client.session_transaction() as session:
-        assert "_user_id" not in session
-
-
-def test_authenticated_session_behavior(client, app):
-    _create_user(app, "alice", "secret123")
-    client.post(
-        "/login",
-        data={"username": "alice", "password": "secret123"},
-        follow_redirects=True,
-    )
-
-    login_response = client.get("/login")
-    register_response = client.get("/register")
-
-    assert login_response.status_code == 302
-    assert login_response.headers["Location"].endswith("/tasks")
-
-    assert register_response.status_code == 302
-    assert register_response.headers["Location"].endswith("/tasks")
+    assert response.get_json() == []

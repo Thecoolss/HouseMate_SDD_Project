@@ -1,15 +1,12 @@
-from flask import Flask
-from flask_login import LoginManager
+from flask import Flask, jsonify
+from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from flask_wtf import CSRFProtect
+from werkzeug.exceptions import HTTPException
 
-from app.time_utils import format_local_datetime
 from config import Config
 
 
 db = SQLAlchemy()
-login_manager = LoginManager()
-csrf = CSRFProtect()
 
 
 def create_app(test_config=None):
@@ -17,18 +14,31 @@ def create_app(test_config=None):
     app.config.from_object(Config)
     if test_config is not None:
         app.config.from_mapping(test_config)
+    if not app.config.get("AUTH_SECRET"):
+        raise RuntimeError("AUTH_SECRET must be set.")
 
     db.init_app(app)
-    login_manager.init_app(app)
-    csrf.init_app(app)
+    # Only the static UI's origin may call this service from a browser.
+    CORS(app, origins=[app.config["CORS_ORIGIN"]])
 
     # Importing the models package registers every model with SQLAlchemy before create_all().
     from app import models  # noqa: F401
     from app.domain2 import bp as domain2_bp
+    from app.observability import init_request_logging, register_health
 
-    app.register_blueprint(domain2_bp, url_prefix="")
+    app.register_blueprint(domain2_bp)
 
-    app.add_template_filter(format_local_datetime, "localdatetime")
+    init_request_logging(app)
+    register_health(app, db, models.ContributionScore, "user_id")
+
+    @app.errorhandler(HTTPException)
+    def http_error(error):
+        return jsonify(error=error.description), error.code
+
+    @app.errorhandler(Exception)
+    def unexpected_error(error):
+        app.logger.exception("Unhandled error")
+        return jsonify(error="Internal server error."), 500
 
     with app.app_context():
         db.create_all()

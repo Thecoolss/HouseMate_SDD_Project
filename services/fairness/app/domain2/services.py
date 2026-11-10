@@ -10,7 +10,12 @@ from app.models import ContributionScore
 from app.time_utils import utc_now
 
 
-def calculate_fairness(period_start, period_end, calculated_at=None):
+def calculate_fairness(period_start, period_end, calculated_at=None, *, token):
+    """Append one ContributionScore per household member for the period.
+
+    token is the logged-in user's bearer token, forwarded to household by the seam.
+    Raises HouseholdUnavailable if household cannot be reached.
+    """
     if not isinstance(period_start, datetime) or not isinstance(period_end, datetime):
         raise ValueError("The contribution period must use datetime values.")
     if period_start > period_end:
@@ -21,8 +26,8 @@ def calculate_fairness(period_start, period_end, calculated_at=None):
         raise ValueError("The calculation time is invalid.")
 
     # Both reads come from the household service over HTTP (see app/seam.py).
-    user_ids = [member["id"] for member in get_members()]
-    contributions = get_contributions(period_start, period_end, calculated_at)
+    user_ids = [member["id"] for member in get_members(token)]
+    contributions = get_contributions(token, period_start, period_end, calculated_at)
 
     task_counts = {user_id: 0 for user_id in user_ids}
     weighted_scores = {user_id: 0 for user_id in user_ids}

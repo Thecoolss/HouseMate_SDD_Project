@@ -1,10 +1,9 @@
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 import pytest
 from flask import Flask
 
-from app.time_utils import format_local_datetime, local_to_utc_naive, utc_to_local
+from app.time_utils import local_to_utc_naive
 
 
 @pytest.fixture()
@@ -59,34 +58,3 @@ def test_local_to_utc_naive_uses_configured_timezone(household_timezone):
     assert local_to_utc_naive(datetime(2026, 7, 1, 12, 0)) == datetime(2026, 7, 1, 12, 0)
 
 
-def test_utc_to_local_returns_none_for_missing_value(household_timezone):
-    assert utc_to_local(None) is None
-
-
-@pytest.mark.parametrize(
-    ("utc_value", "expected_local"),
-    [
-        (datetime(2026, 7, 1, 10, 0), datetime(2026, 7, 1, 12, 0)),
-        (datetime(2026, 1, 15, 11, 0), datetime(2026, 1, 15, 12, 0)),
-        (datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc), datetime(2026, 7, 1, 12, 0)),
-    ],
-)
-def test_utc_to_local_converts_to_household_timezone(household_timezone, utc_value, expected_local):
-    result = utc_to_local(utc_value)
-
-    assert result.replace(tzinfo=None) == expected_local
-    assert result.tzinfo == ZoneInfo("Europe/Paris")
-
-
-def test_local_and_utc_conversions_round_trip(household_timezone):
-    local_value = datetime(2026, 10, 9, 18, 45)
-
-    assert utc_to_local(local_to_utc_naive(local_value)).replace(tzinfo=None) == local_value
-
-
-def test_format_local_datetime_formats_in_household_timezone(household_timezone):
-    assert format_local_datetime(datetime(2026, 7, 1, 10, 0), "%Y-%m-%d %H:%M") == "2026-07-01 12:00"
-
-
-def test_format_local_datetime_returns_empty_string_for_missing_value(household_timezone):
-    assert format_local_datetime(None, "%Y-%m-%d %H:%M") == ""
