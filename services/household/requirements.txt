@@ -6,6 +6,6 @@ itsdangerous==2.2.0
 # Installed by Flask-SQLAlchemy anyway; pinned because SQLAlchemy 2.1.x breaks the
 # module-level --cov runs in the README (25 tests fail). 2.0.54 is the tested version.
 SQLAlchemy==2.0.54
+# SQL Server driver, used through DATABASE_URL=mssql+pymssql://...
+pymssql==2.4.6
 gunicorn==27.0.0
-pytest==9.1.1
-pytest-cov==7.1.0
