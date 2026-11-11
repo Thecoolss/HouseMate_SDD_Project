@@ -5,11 +5,11 @@ from pathlib import Path
 def _database_url():
     # In compose and on Azure, DATABASE_URL points at this service's SQL Server database,
     # e.g. mssql+pymssql://household_user:<password>@sqlserver:1433/household.
-    # Without it (running the service on its own), fall back to a local SQLite file.
+    # Without it (running the service on its own), fall back to a SQLite file in DATA_DIR.
     url = os.environ.get("DATABASE_URL")
     if url:
         return url
-    data_dir = Path("./data").resolve()
+    data_dir = Path(os.environ.get("DATA_DIR", "./data")).resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
     return f"sqlite:///{data_dir / 'app.db'}"
 
