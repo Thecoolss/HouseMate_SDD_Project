@@ -1,9 +1,12 @@
 FROM python:3.12.16-slim-bookworm
 
 
+# DATA_DIR: only used when DATABASE_URL is unset (docker run without compose). /app is
+# read-only for appuser, so the fallback SQLite file goes in /tmp and is lost on removal.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PORT=5001
+    PORT=5001 \
+    DATA_DIR=/tmp/data
 
 WORKDIR /app
 
