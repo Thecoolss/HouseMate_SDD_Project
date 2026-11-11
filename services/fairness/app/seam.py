@@ -1,8 +1,9 @@
 """Seam between the fairness service and the household service (ADR-2, ADR-6).
 
 Fairness never touches household's database. Everything it needs from the household
-domain comes through the two functions below, which call household's internal HTTP
-endpoints with a timeout and turn any transport or HTTP failure into HouseholdUnavailable.
+domain comes through the two functions below. They call household's internal HTTP
+endpoints with the logged-in user's bearer token and a timeout, and turn any transport
+or HTTP failure into HouseholdUnavailable.
 """
 
 from datetime import datetime
@@ -15,11 +16,12 @@ class HouseholdUnavailable(RuntimeError):
     """The household service could not be reached or returned an error."""
 
 
-def _get_json(path, params=None):
+def _get_json(path, token, params=None):
     try:
         response = httpx.get(
             current_app.config["HOUSEHOLD_URL"] + path,
             params=params,
+            headers={"Authorization": f"Bearer {token}"},
             timeout=current_app.config["HOUSEHOLD_TIMEOUT_S"],
         )
         response.raise_for_status()
@@ -32,12 +34,12 @@ def _get_json(path, params=None):
         raise HouseholdUnavailable("The household service is unavailable.") from error
 
 
-def get_members():
+def get_members(token):
     """Household members as [{id, username}]."""
-    return _get_json("/internal/users")
+    return _get_json("/internal/users", token)
 
 
-def get_contributions(period_start, period_end, calculated_at):
+def get_contributions(token, period_start, period_end, calculated_at):
     """Contribution data for the period, as one dict with three lists.
 
     completed_tasks: [{user_id, difficulty, completed_at}]
@@ -46,6 +48,7 @@ def get_contributions(period_start, period_end, calculated_at):
     """
     data = _get_json(
         "/internal/contributions",
+        token,
         params={
             "start": period_start.isoformat(),
             "end": period_end.isoformat(),

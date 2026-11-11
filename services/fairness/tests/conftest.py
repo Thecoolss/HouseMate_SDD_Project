@@ -10,7 +10,7 @@ def app(tmp_path):
     app = create_app(
         {
             "TESTING": True,
-            "WTF_CSRF_ENABLED": False,
+            "AUTH_SECRET": "test-auth-secret",
             "SQLALCHEMY_DATABASE_URI": f"sqlite:///{test_db}",
             "SQLALCHEMY_ENGINE_OPTIONS": {
                 "poolclass": StaticPool,

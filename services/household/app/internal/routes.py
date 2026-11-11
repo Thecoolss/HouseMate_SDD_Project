@@ -1,7 +1,6 @@
 from datetime import datetime
 
 from flask import jsonify, request
-from flask_login import login_required
 
 from app import db
 from app.domain1.services import (
@@ -11,15 +10,18 @@ from app.domain1.services import (
 )
 from app.internal import bp
 from app.models import User
+from app.tokens import require_auth
+
+# Called by the fairness service, which forwards the logged-in user's bearer token.
 
 
 @bp.get("/contributions")
-@login_required
+@require_auth
 def contributions():
     """Contribution data the fairness service needs, in one response.
 
-    Query parameters (ISO 8601): start and end bound the period, as_of is the
-    time overdue tasks are measured against.
+    Query parameters (ISO 8601, naive UTC): start and end bound the period, as_of is
+    the time overdue tasks are measured against.
     """
     try:
         period_start = datetime.fromisoformat(request.args["start"])
@@ -44,7 +46,7 @@ def contributions():
 
 
 @bp.get("/users")
-@login_required
+@require_auth
 def users():
     """Household members, as [{id, username}]."""
     rows = db.session.execute(db.select(User.id, User.username).order_by(User.id.asc()))
