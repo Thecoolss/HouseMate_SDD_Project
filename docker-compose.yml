@@ -1,0 +1,63 @@
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?set MSSQL_SA_PASSWORD in .env}
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" -b -o /dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      SQLCMDPASSWORD: ${MSSQL_SA_PASSWORD:?set MSSQL_SA_PASSWORD in .env}
+      HOUSEHOLD_DB_PASSWORD: ${HOUSEHOLD_DB_PASSWORD:?set HOUSEHOLD_DB_PASSWORD in .env}
+      FAIRNESS_DB_PASSWORD: ${FAIRNESS_DB_PASSWORD:?set FAIRNESS_DB_PASSWORD in .env}
+    volumes:
+      - ./db/init.sql:/init.sql:ro
+    entrypoint: ["/opt/mssql-tools18/bin/sqlcmd", "-S", "sqlserver", "-U", "sa", "-C", "-b", "-i", "/init.sql"]
+    restart: "no"
+
+  household:
+    build: ./services/household
+    ports:
+      - "5000:5000"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      PORT: 5000
+      DATABASE_URL: mssql+pymssql://household_user:${HOUSEHOLD_DB_PASSWORD}@sqlserver:1433/household
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      CORS_ORIGIN: http://localhost:8080
+      HOUSEHOLD_TIMEZONE: Europe/Paris
+      GIT_SHA: ${GIT_SHA:-dev}
+
+  fairness:
+    build: ./services/fairness
+    ports:
+      - "5001:5001"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      PORT: 5001
+      DATABASE_URL: mssql+pymssql://fairness_user:${FAIRNESS_DB_PASSWORD}@sqlserver:1433/fairness
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      HOUSEHOLD_URL: http://household:5000
+      HOUSEHOLD_TIMEOUT_S: 2
+      CORS_ORIGIN: http://localhost:8080
+      GIT_SHA: ${GIT_SHA:-dev}
+
+volumes:
+  mssql-data:

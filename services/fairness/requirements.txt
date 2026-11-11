@@ -5,8 +5,8 @@ flask-cors==6.0.5
 itsdangerous==2.2.0
 # Pinned because SQLAlchemy 2.1.x breaks the module-level --cov runs (see household).
 SQLAlchemy==2.0.54
+# SQL Server driver, used through DATABASE_URL=mssql+pymssql://...
+pymssql==2.4.6
 # HTTP client for calling the household service over the seam.
 httpx==0.28.1
 gunicorn==27.0.0
-pytest==9.1.1
-pytest-cov==7.1.0
