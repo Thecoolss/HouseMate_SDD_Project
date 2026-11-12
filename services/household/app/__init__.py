@@ -47,7 +47,11 @@ def create_app(test_config=None):
         app.logger.exception("Unhandled error")
         return jsonify(error="Internal server error."), 500
 
+    # The schema comes from the versioned migrations, not db.create_all(). The runner
+    # applies any that have not run yet and records them, so a second boot does nothing.
+    from app.migrations import run_migrations
+
     with app.app_context():
-        db.create_all()
+        run_migrations(db.engine)
 
     return app

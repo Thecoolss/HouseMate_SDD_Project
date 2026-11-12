@@ -18,6 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py config.py ./
 COPY app/ ./app/
+# The schema is defined by these, applied at startup by the migration runner.
+COPY migrations/ ./migrations/
 
 USER appuser
 
@@ -26,6 +28,5 @@ EXPOSE 5000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
   CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"PORT\"]}/health', timeout=2)" || exit 1
 
-
-CMD exec gunicorn --bind 0.0.0.0:${PORT} --access-logfile - "app:create_app()"
+# Shell form so ${PORT} is expanded; exec makes gunicorn PID 1 so it gets docker's stop signal.
 CMD exec gunicorn --bind 0.0.0.0:${PORT} "app:create_app()"

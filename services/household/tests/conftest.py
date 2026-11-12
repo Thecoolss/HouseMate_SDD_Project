@@ -19,13 +19,12 @@ def app(tmp_path):
         }
     )
 
+    # create_app() already ran the migrations once on this fresh database. The tests
+    # exercise the same migrated schema the service runs in production, not an ORM
+    # create_all(), so a mismatch between the models and the migrations would fail here.
     with app.app_context():
-        db.session.remove()
-        db.drop_all()
-        db.create_all()
         yield app
         db.session.remove()
-        db.drop_all()
 
 
 @pytest.fixture()
