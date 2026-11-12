@@ -18,6 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py config.py ./
 COPY app/ ./app/
+# The schema is defined by these, applied at startup by the migration runner.
+COPY migrations/ ./migrations/
 
 USER appuser
 
