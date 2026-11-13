@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Bookings · HouseMate</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <nav></nav>
+    <main>
+      <div class="flash" hidden></div>
+
+      <header class="page-heading">
+        <div>
+          <p class="eyebrow">Shared resources</p>
+          <h1>Bookings</h1>
+          <p class="lede">See when household spaces and equipment are reserved.</p>
+        </div>
+        <button class="button button-primary" type="button" id="new-booking-btn">New booking</button>
+      </header>
+
+      <form class="booking-form hidden" id="booking-form">
+        <h2 id="form-title">New booking</h2>
+        <input type="hidden" id="booking-id" />
+
+        <label for="resource">Resource</label>
+        <select id="resource" name="resource" required>
+          <option value="laundry">Laundry</option>
+          <option value="kitchen">Kitchen</option>
+          <option value="living_room">Living room</option>
+        </select>
+
+        <div class="form-grid">
+          <div>
+            <label for="start_time">Start</label>
+            <input id="start_time" name="start_time" type="datetime-local" required />
+          </div>
+          <div>
+            <label for="end_time">End</label>
+            <input id="end_time" name="end_time" type="datetime-local" required />
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="button button-primary" type="submit" id="save-btn">Create booking</button>
+          <button class="button button-quiet" type="button" id="cancel-btn">Cancel</button>
+        </div>
+      </form>
+
+      <section id="booking-container" aria-label="Household bookings"></section>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+    <script>
+      if (requireLogin()) {
+        const me = getUser();
+        const container = document.getElementById("booking-container");
+        const form = document.getElementById("booking-form");
+        const formTitle = document.getElementById("form-title");
+        const saveBtn = document.getElementById("save-btn");
+
+        function toLocalInput(iso) {
+          const d = new Date(iso);
+          const pad = (n) => String(n).padStart(2, "0");
+          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+        function showForm(booking) {
+          document.getElementById("booking-id").value = booking ? booking.id : "";
+          document.getElementById("resource").value = booking ? booking.resource : "laundry";
+          document.getElementById("start_time").value = booking ? toLocalInput(booking.start_time) : "";
+          document.getElementById("end_time").value = booking ? toLocalInput(booking.end_time) : "";
+          formTitle.textContent = booking ? "Edit booking" : "New booking";
+          saveBtn.textContent = booking ? "Save changes" : "Create booking";
+          form.classList.remove("hidden");
+          clearFlash();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+
+        function hideForm() {
+          form.classList.add("hidden");
+        }
+
+        document.getElementById("new-booking-btn").addEventListener("click", () => showForm(null));
+        document.getElementById("cancel-btn").addEventListener("click", hideForm);
+
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const id = document.getElementById("booking-id").value;
+          const body = {
+            resource: document.getElementById("resource").value,
+            start_time: document.getElementById("start_time").value || null,
+            end_time: document.getElementById("end_time").value || null,
+          };
+          try {
+            if (id) {
+              await household(`/bookings/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+              flash("Booking updated.", "success");
+            } else {
+              await household("/bookings", { method: "POST", body: JSON.stringify(body) });
+              flash("Booking created.", "success");
+            }
+            hideForm();
+            loadBookings();
+          } catch (err) {
+            flashError(err);
+          }
+        });
+
+        async function removeBooking(id) {
+          clearFlash();
+          try {
+            await household(`/bookings/${id}`, { method: "DELETE" });
+            flash("Booking deleted.", "success");
+            loadBookings();
+          } catch (err) {
+            flashError(err);
+          }
+        }
+
+        function button(label, cls, onClick) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = `button ${cls}`;
+          b.textContent = label;
+          b.addEventListener("click", onClick);
+          return b;
+        }
+
+        function titleCase(resource) {
+          return resource.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        }
+
+        function bookingCard(booking) {
+          const article = document.createElement("article");
+          article.className = "booking-row";
+          const mine = booking.created_by === me.id;
+          article.innerHTML = `
+            <div class="booking-main">
+              <div class="booking-title-line">
+                <h2>${escapeHtml(titleCase(booking.resource))}</h2>
+                <span class="booking-time">${formatDate(booking.start_time)}</span>
+              </div>
+              <dl class="booking-meta">
+                <div><dt>Start</dt><dd>${formatDateTime(booking.start_time)}</dd></div>
+                <div><dt>End</dt><dd>${formatDateTime(booking.end_time)}</dd></div>
+                <div><dt>Reserved by</dt><dd>${escapeHtml(booking.created_by_username || "Unknown")}</dd></div>
+              </dl>
+            </div>
+            <div class="booking-actions"></div>
+          `;
+          if (mine) {
+            const actions = article.querySelector(".booking-actions");
+            actions.append(button("Edit", "button-quiet", () => showForm(booking)));
+            actions.append(button("Delete", "button-danger", () => removeBooking(booking.id)));
+          }
+          return article;
+        }
+
+        async function loadBookings() {
+          try {
+            const bookings = await household("/bookings");
+            container.innerHTML = "";
+            if (bookings.length === 0) {
+              container.innerHTML = `
+                <section class="empty-state">
+                  <p class="eyebrow">No reservations yet</p>
+                  <h2>Reserve a shared resource.</h2>
+                  <p>Bookings prevent conflicting plans for the same household resource.</p>
+                </section>`;
+              return;
+            }
+            container.className = "booking-list";
+            bookings.forEach((booking) => container.append(bookingCard(booking)));
+          } catch (err) {
+            container.innerHTML = "";
+            flashError(err);
+          }
+        }
+
+        loadBookings();
+      }
+    </script>
+  </body>
+</html>

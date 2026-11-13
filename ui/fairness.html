@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Contribution · HouseMate</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <nav></nav>
+    <main>
+      <div class="flash" hidden></div>
+
+      <header class="page-heading">
+        <div>
+          <p class="eyebrow">Household analytics</p>
+          <h1>Contribution</h1>
+          <p class="lede">A view of recorded household activity, not an objective judgment of fairness.</p>
+        </div>
+        <button class="button button-primary" type="button" id="recalc-btn">Recalculate</button>
+      </header>
+
+      <!-- Shown when the fairness page loads but household (names, recalculate) is down. -->
+      <div class="banner" id="degraded-banner" hidden>
+        Household coordination is unavailable, so member names are hidden and recalculation is
+        paused. The last recorded snapshots are still shown below.
+      </div>
+
+      <p class="analytics-note">
+        Contribution points come from completed task difficulty and bookings during the period.
+        Overdue tasks are shown separately and do not reduce contribution percentages.
+      </p>
+
+      <div id="fairness-container"></div>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+    <script>
+      if (requireLogin()) {
+        const container = document.getElementById("fairness-container");
+        const banner = document.getElementById("degraded-banner");
+
+        document.getElementById("recalc-btn").addEventListener("click", async () => {
+          clearFlash();
+          try {
+            const data = await fairness("/fairness/recalculate", { method: "POST" });
+            flash(`Recalculated snapshots for ${data.scores.length} household member(s).`, "success");
+            load();
+          } catch (err) {
+            // A 503 here is the designed cross-seam failure: household is down, so the
+            // fairness service cannot gather fresh data. Show it, do not crash.
+            flashError(err);
+          }
+        });
+
+        function cell(value) {
+          return `<td>${value}</td>`;
+        }
+
+        function row(entry) {
+          const s = entry.snapshot;
+          const name = entry.username ? escapeHtml(entry.username) : `User #${entry.user_id}`;
+          if (!s) {
+            return `<tr><th scope="row">${name}</th><td colspan="7" class="not-calculated">No calculation yet</td></tr>`;
+          }
+          return `<tr>
+            <th scope="row">${name}</th>
+            ${cell(`${formatDate(s.period_start)} - ${formatDate(s.period_end)}`)}
+            ${cell(s.tasks_completed)}
+            ${cell(s.weighted_score.toFixed(2))}
+            ${cell(s.bookings_count)}
+            ${cell(s.overdue_tasks === null ? "Not recorded" : s.overdue_tasks)}
+            ${cell(`${s.contribution_score.toFixed(2)}%`)}
+            ${cell(formatDateTime(s.calculated_at))}
+          </tr>`;
+        }
+
+        async function load() {
+          try {
+            const data = await fairness("/fairness");
+            banner.hidden = data.household_available;
+
+            if (data.rows.length === 0) {
+              container.innerHTML = `
+                <section class="empty-state">
+                  <p class="eyebrow">No records yet</p>
+                  <h2>Nothing has been calculated.</h2>
+                  <p>Press Recalculate to produce the first contribution snapshot.</p>
+                </section>`;
+              return;
+            }
+
+            container.innerHTML = `
+              <div class="analytics-table-wrap">
+                <table class="analytics-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">User</th>
+                      <th scope="col">Period</th>
+                      <th scope="col">Tasks completed</th>
+                      <th scope="col">Weighted points</th>
+                      <th scope="col">Bookings</th>
+                      <th scope="col">Overdue tasks</th>
+                      <th scope="col">Contribution</th>
+                      <th scope="col">Calculated at</th>
+                    </tr>
+                  </thead>
+                  <tbody>${data.rows.map(row).join("")}</tbody>
+                </table>
+              </div>`;
+          } catch (err) {
+            container.innerHTML = "";
+            flashError(err);
+          }
+        }
+
+        load();
+      }
+    </script>
+  </body>
+</html>
