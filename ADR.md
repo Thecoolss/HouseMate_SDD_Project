@@ -53,3 +53,16 @@ Context: Each service now owns its own database, and once a database holds data 
 Decision: Define each service's schema as numbered SQL files applied at startup by a small forward-only runner that records each applied file in a schema_migrations table, so each migration runs exactly once; db.create_all() is removed. The cross-seam foreign key is dropped: contribution_score.user_id is a plain id, and the household user list fetched over HTTP is the only check that a snapshot's user exists.
 Alternatives considered: 1. A migration tool such as Alembic — rejected because a ~60-line runner is enough for this schema and more explainable. 2. Down-migrations for rollback — rejected because forward-only is simpler and the recovery plan below covers a bad migration without them.
 Consequences: Data survives restarts and redeploys because the schema changes in place instead of being dropped, but integrity across the seam is now only as good as the application code, and a snapshot can outlive its user. Recovery from a bad migration is forward-only: fix it in a new higher-numbered migration (never edit an applied one), and because the single Container App replica runs migrations at startup before serving, a migration that fails leaves its transaction rolled back and the previous schema intact.
+
+## 8. (placeholder) Serverless hosting on Azure
+Date: TBD
+Status: Proposed
+Context: Reserved for the Azure hosting decision. Written when the deployment lands so it matches what is actually provisioned.
+
+## 9. Pipeline and testing
+Date: 2026-11-13
+Status: Decided
+Context: Every push and pull request must install, lint and test each service, measure coverage per service and fail under 70%, and build both images, while deployment stays on main. The split also needs at least one test that exercises the seam between the two services, since the per-service unit tests mock or skip the HTTP hop.
+Decision: One GitHub Actions workflow with a test job (per service, via a matrix) that CD depends on, so images build on every push and PR but are pushed to GHCR only on main. The cross-seam flow is covered by a single integration test that runs the fairness calculation against a real household service rather than a stub, so the HTTP seam, token forwarding and JSON shapes are all exercised.
+Alternatives considered: 1. Replacing household with a stub or recorded responses in the cross-seam test — rejected because a stub re-encodes the shapes the test is meant to verify, so a drift in household's real response would pass; running against the real service catches that. 2. End-to-end browser tests through the UI — rejected because they are slow and brittle and do not add coverage over service-level tests of the same rules.
+Consequences: A broken Dockerfile or a sub-70% service fails the pipeline before anything deploys, and the seam is protected by a test that uses the real contract. The cost is that the cross-seam test needs both services running (the compose stack in CI), making it slower and heavier than the unit tests; until it is wired it stays skipped, so the seam is currently covered only by manual compose testing, which is a gap to close.

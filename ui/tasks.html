@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Tasks · HouseMate</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <nav></nav>
+    <main>
+      <div class="flash" hidden></div>
+
+      <header class="page-heading">
+        <div>
+          <p class="eyebrow">Household coordination</p>
+          <h1>Tasks</h1>
+          <p class="lede">Keep shared responsibilities visible and moving.</p>
+        </div>
+        <button class="button button-primary" type="button" id="new-task-btn">Create task</button>
+      </header>
+
+      <!-- Create / edit form, hidden until Create or Edit is pressed. -->
+      <form class="task-form hidden" id="task-form">
+        <h2 id="form-title">Create a task</h2>
+        <input type="hidden" id="task-id" />
+
+        <label for="title">Title</label>
+        <input id="title" name="title" maxlength="200" required />
+
+        <label for="description">Description</label>
+        <textarea id="description" name="description" rows="4"></textarea>
+
+        <div class="form-grid">
+          <div>
+            <label for="difficulty">Difficulty</label>
+            <select id="difficulty" name="difficulty" required>
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+          <div>
+            <label for="due_date">Due date</label>
+            <input id="due_date" name="due_date" type="datetime-local" />
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="button button-primary" type="submit" id="save-btn">Create task</button>
+          <button class="button button-quiet" type="button" id="cancel-btn">Cancel</button>
+        </div>
+      </form>
+
+      <section id="task-container" aria-label="Household tasks"></section>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+    <script>
+      if (requireLogin()) {
+        const me = getUser();
+        const container = document.getElementById("task-container");
+        const form = document.getElementById("task-form");
+        const formTitle = document.getElementById("form-title");
+        const saveBtn = document.getElementById("save-btn");
+
+        function showForm(task) {
+          document.getElementById("task-id").value = task ? task.id : "";
+          document.getElementById("title").value = task ? task.title : "";
+          document.getElementById("description").value = task ? task.description || "" : "";
+          document.getElementById("difficulty").value = task ? task.difficulty : "medium";
+          // A UTC ISO string -> the value a datetime-local input wants (local wall time).
+          document.getElementById("due_date").value = task && task.due_date
+            ? toLocalInput(task.due_date)
+            : "";
+          formTitle.textContent = task ? "Edit task" : "Create a task";
+          saveBtn.textContent = task ? "Save changes" : "Create task";
+          form.classList.remove("hidden");
+          clearFlash();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+
+        function hideForm() {
+          form.classList.add("hidden");
+        }
+
+        function toLocalInput(iso) {
+          const d = new Date(iso);
+          const pad = (n) => String(n).padStart(2, "0");
+          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+        document.getElementById("new-task-btn").addEventListener("click", () => showForm(null));
+        document.getElementById("cancel-btn").addEventListener("click", hideForm);
+
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const id = document.getElementById("task-id").value;
+          const body = {
+            title: document.getElementById("title").value.trim(),
+            description: document.getElementById("description").value.trim() || null,
+            difficulty: document.getElementById("difficulty").value,
+            due_date: document.getElementById("due_date").value || null,
+          };
+          try {
+            if (id) {
+              await household(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+              flash("Task updated.", "success");
+            } else {
+              await household("/tasks", { method: "POST", body: JSON.stringify(body) });
+              flash("Task created.", "success");
+            }
+            hideForm();
+            loadTasks();
+          } catch (err) {
+            flashError(err);
+          }
+        });
+
+        async function act(path) {
+          clearFlash();
+          try {
+            await household(path, { method: "POST" });
+            loadTasks();
+          } catch (err) {
+            flashError(err);
+          }
+        }
+
+        async function removeTask(id) {
+          clearFlash();
+          try {
+            await household(`/tasks/${id}`, { method: "DELETE" });
+            flash("Task deleted.", "success");
+            loadTasks();
+          } catch (err) {
+            flashError(err);
+          }
+        }
+
+        function taskCard(task) {
+          const article = document.createElement("article");
+          article.className = "task-row";
+
+          const canClaim = task.status === "pending" && task.assigned_to === null;
+          const canComplete = task.status === "pending" && task.assigned_to === me.id;
+          const mine = task.created_by === me.id;
+
+          article.innerHTML = `
+            <div class="task-main">
+              <div class="task-title-line">
+                <h2>${escapeHtml(task.title)}</h2>
+                <span class="status status-${task.status}">${task.status}</span>
+              </div>
+              ${task.description ? `<p class="task-description">${escapeHtml(task.description)}</p>` : ""}
+              <dl class="task-meta">
+                <div><dt>Difficulty</dt><dd>${task.difficulty}</dd></div>
+                <div><dt>Due</dt><dd>${task.due_date ? formatDateTime(task.due_date) : "No due date"}</dd></div>
+                <div><dt>Created by</dt><dd>${escapeHtml(task.created_by_username || "Unknown")}</dd></div>
+                <div><dt>Assignee</dt><dd>${task.assigned_to ? escapeHtml(task.assigned_to_username || "Unknown") : "Unclaimed"}</dd></div>
+              </dl>
+            </div>
+            <div class="task-actions"></div>
+          `;
+
+          const actions = article.querySelector(".task-actions");
+          if (canClaim) actions.append(button("Claim", "button-secondary", () => act(`/tasks/${task.id}/claim`)));
+          if (canComplete) actions.append(button("Complete", "button-secondary", () => act(`/tasks/${task.id}/complete`)));
+          if (mine) {
+            actions.append(button("Edit", "button-quiet", () => showForm(task)));
+            actions.append(button("Delete", "button-danger", () => removeTask(task.id)));
+          }
+          return article;
+        }
+
+        function button(label, cls, onClick) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = `button ${cls}`;
+          b.textContent = label;
+          b.addEventListener("click", onClick);
+          return b;
+        }
+
+        async function loadTasks() {
+          try {
+            const tasks = await household("/tasks");
+            container.innerHTML = "";
+            if (tasks.length === 0) {
+              container.innerHTML = `
+                <section class="empty-state">
+                  <p class="eyebrow">Nothing on the list yet</p>
+                  <h2>Start with one shared task.</h2>
+                  <p>Create a task and your household can claim it when ready.</p>
+                </section>`;
+              return;
+            }
+            container.className = "task-list";
+            tasks.forEach((task) => container.append(taskCard(task)));
+          } catch (err) {
+            container.innerHTML = "";
+            flashError(err);
+          }
+        }
+
+        loadTasks();
+      }
+    </script>
+  </body>
+</html>

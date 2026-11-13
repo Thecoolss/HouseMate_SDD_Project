@@ -25,7 +25,26 @@ services:
       FAIRNESS_DB_PASSWORD: ${FAIRNESS_DB_PASSWORD:?set FAIRNESS_DB_PASSWORD in .env}
     volumes:
       - ./db/init.sql:/init.sql:ro
-    entrypoint: ["/opt/mssql-tools18/bin/sqlcmd", "-S", "sqlserver", "-U", "sa", "-C", "-b", "-i", "/init.sql"]
+    # SQL Server can report healthy (a bare SELECT 1 answers) while it is still recovering
+    # the existing databases from the volume on a second `up`. Running init.sql in that
+    # gap can fail, so retry: up to 10 attempts, 3s apart, each with a 30s login timeout.
+    # init.sql is idempotent, so re-running it is safe. -b makes sqlcmd exit non-zero on a
+    # SQL error so a genuinely broken script still fails the stack.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        for attempt in $$(seq 1 10); do
+          echo "db-init attempt $$attempt..."
+          if /opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -C -b -l 30 -i /init.sql; then
+            echo "db-init succeeded"
+            exit 0
+          fi
+          echo "db-init attempt $$attempt failed, retrying in 3s"
+          sleep 3
+        done
+        echo "db-init failed after 10 attempts"
+        exit 1
     restart: "no"
 
   household:
@@ -58,6 +77,16 @@ services:
       HOUSEHOLD_TIMEOUT_S: 2
       CORS_ORIGIN: http://localhost:8080
       GIT_SHA: ${GIT_SHA:-dev}
+
+  # The static UI, served by a stock nginx with the ui/ folder mounted read-only.
+  # No Dockerfile and not a service container ; on Azure this becomes
+  # a Static Web App. The browser loads these files, then calls the two services directly.
+  ui:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./ui:/usr/share/nginx/html:ro
 
 volumes:
   mssql-data:
