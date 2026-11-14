@@ -1,0 +1,447 @@
+openapi: 3.0.3
+info:
+  title: HouseMate household service
+  version: 1.0.0
+  description: >
+    Users, authentication, tasks and bookings. Also serves the two internal endpoints the
+    fairness service calls across the seam. Datetimes sent as ISO 8601 without a zone are
+    read as household local time (HOUSEHOLD_TIMEZONE); datetimes returned are UTC with a
+    trailing Z, except under /internal, which are naive UTC.
+servers:
+  - url: http://localhost:5000
+    description: docker compose
+
+tags:
+  - name: auth
+  - name: tasks
+  - name: bookings
+  - name: internal
+    description: Called by the fairness service, not by the UI.
+  - name: operations
+
+paths:
+  /register:
+    post:
+      tags: [auth]
+      summary: Create an account and return a token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Credentials" }
+      responses:
+        "201":
+          description: Account created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409":
+          description: Username already taken.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /login:
+    post:
+      tags: [auth]
+      summary: Exchange a username and password for a token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Credentials" }
+      responses:
+        "200":
+          description: Logged in.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401":
+          description: Wrong username or password.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /tasks:
+    get:
+      tags: [tasks]
+      summary: List all household tasks, newest first
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The tasks.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Task" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [tasks]
+      summary: Create a task
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskCreate" }
+      responses:
+        "201":
+          description: Task created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /tasks/{task_id}:
+    parameters:
+      - { $ref: "#/components/parameters/TaskId" }
+    patch:
+      tags: [tasks]
+      summary: Edit a task (creator only)
+      description: Fields left out of the body are unchanged. description and due_date set to null are cleared.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskUpdate" }
+      responses:
+        "200":
+          description: Task updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [tasks]
+      summary: Delete a task (creator only)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Task deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /tasks/{task_id}/claim:
+    parameters:
+      - { $ref: "#/components/parameters/TaskId" }
+    post:
+      tags: [tasks]
+      summary: Claim a pending, unclaimed task
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Task claimed by the caller.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /tasks/{task_id}/complete:
+    parameters:
+      - { $ref: "#/components/parameters/TaskId" }
+    post:
+      tags: [tasks]
+      summary: Mark a claimed task done (assignee only)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Task completed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /bookings:
+    get:
+      tags: [bookings]
+      summary: List all bookings, soonest first
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The bookings.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Booking" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [bookings]
+      summary: Reserve a shared resource
+      description: Rejected with 400 if the resource is already booked for an overlapping time. Back-to-back bookings are allowed.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BookingCreate" }
+      responses:
+        "201":
+          description: Booking created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Booking" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /bookings/{booking_id}:
+    parameters:
+      - { $ref: "#/components/parameters/BookingId" }
+    patch:
+      tags: [bookings]
+      summary: Edit a booking (creator only)
+      description: Fields left out of the body are unchanged.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BookingUpdate" }
+      responses:
+        "200":
+          description: Booking updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Booking" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [bookings]
+      summary: Delete a booking (creator only)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Booking deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /internal/users:
+    get:
+      tags: [internal]
+      summary: Household members
+      description: Used by the fairness service to learn which user ids exist and their names.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Members ordered by id.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Member" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /internal/contributions:
+    get:
+      tags: [internal]
+      summary: Contribution data for a period
+      description: >
+        Completed tasks and bookings that fall inside [start, end], and pending tasks that
+        are overdue at as_of. All three parameters are naive UTC ISO 8601 datetimes.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: start, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: end, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: as_of, in: query, required: true, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: The contribution data.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contributions" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /health:
+    get:
+      tags: [operations]
+      summary: Liveness and database check
+      description: 200 when this service can read and write its own database, 503 otherwise. Does not look at the fairness service.
+      responses:
+        "200":
+          description: Healthy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: The database is unreachable or not writable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The token returned by /register or /login. The fairness service verifies the same token.
+
+  parameters:
+    TaskId:
+      name: task_id
+      in: path
+      required: true
+      schema: { type: integer }
+    BookingId:
+      name: booking_id
+      in: path
+      required: true
+      schema: { type: integer }
+
+  responses:
+    BadRequest:
+      description: Invalid input, or the action is not allowed in the current state.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing, invalid or expired token.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: The caller is not allowed to do this to this item.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such task or booking.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    Credentials:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string }
+    AuthResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token: { type: string }
+        user: { $ref: "#/components/schemas/Member" }
+    Member:
+      type: object
+      required: [id, username]
+      properties:
+        id: { type: integer }
+        username: { type: string }
+    Difficulty:
+      type: string
+      enum: [easy, medium, hard]
+    Task:
+      type: object
+      required: [id, title, difficulty, status, created_by, assigned_to, created_at]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        difficulty: { $ref: "#/components/schemas/Difficulty" }
+        status: { type: string, enum: [pending, done] }
+        created_by: { type: integer }
+        created_by_username: { type: string, nullable: true }
+        assigned_to: { type: integer, nullable: true }
+        assigned_to_username: { type: string, nullable: true }
+        due_date: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }
+    TaskCreate:
+      type: object
+      required: [title, difficulty]
+      properties:
+        title: { type: string, maxLength: 200 }
+        description: { type: string, nullable: true }
+        difficulty: { $ref: "#/components/schemas/Difficulty" }
+        due_date:
+          type: string
+          nullable: true
+          description: ISO 8601, read as household local time if it has no zone.
+    TaskUpdate:
+      type: object
+      properties:
+        title: { type: string, maxLength: 200 }
+        description: { type: string, nullable: true }
+        difficulty: { $ref: "#/components/schemas/Difficulty" }
+        due_date:
+          type: string
+          nullable: true
+          description: ISO 8601, read as household local time if it has no zone.
+    Resource:
+      type: string
+      enum: [laundry, kitchen, living_room]
+    Booking:
+      type: object
+      required: [id, resource, start_time, end_time, created_by, created_at]
+      properties:
+        id: { type: integer }
+        resource: { $ref: "#/components/schemas/Resource" }
+        start_time: { type: string, format: date-time }
+        end_time: { type: string, format: date-time }
+        created_by: { type: integer }
+        created_by_username: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+    BookingCreate:
+      type: object
+      required: [resource, start_time, end_time]
+      properties:
+        resource: { $ref: "#/components/schemas/Resource" }
+        start_time: { type: string, description: "ISO 8601, read as household local time if it has no zone." }
+        end_time: { type: string, description: "ISO 8601, read as household local time if it has no zone." }
+    BookingUpdate:
+      type: object
+      properties:
+        resource: { $ref: "#/components/schemas/Resource" }
+        start_time: { type: string, description: "ISO 8601, read as household local time if it has no zone." }
+        end_time: { type: string, description: "ISO 8601, read as household local time if it has no zone." }
+    Contributions:
+      type: object
+      required: [completed_tasks, bookings, overdue]
+      properties:
+        completed_tasks:
+          type: array
+          items:
+            type: object
+            required: [user_id, difficulty, completed_at]
+            properties:
+              user_id: { type: integer }
+              difficulty: { $ref: "#/components/schemas/Difficulty" }
+              completed_at: { type: string, format: date-time }
+        bookings:
+          type: array
+          items:
+            type: object
+            required: [user_id]
+            properties:
+              user_id: { type: integer }
+        overdue:
+          type: array
+          items:
+            type: object
+            required: [user_id, overdue_tasks]
+            properties:
+              user_id: { type: integer }
+              overdue_tasks: { type: integer }
+    Health:
+      type: object
+      required: [status, db, version]
+      properties:
+        status: { type: string, enum: [ok, error] }
+        db: { type: string, enum: [ok, error] }
+        version: { type: string, description: The git SHA this build came from. }

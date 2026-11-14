@@ -2,8 +2,6 @@ from datetime import datetime
 
 from app import db
 from app.domain1.rules import (
-    VALID_BOOKING_RESOURCES,
-    VALID_DIFFICULTIES,
     validate_booking,
     validate_difficulty,
     validate_title,

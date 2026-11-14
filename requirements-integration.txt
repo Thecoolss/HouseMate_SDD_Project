@@ -1,0 +1,6 @@
+# Everything the cross-seam integration tests need in one environment: both services'
+# runtime dependencies (they pin identical versions) plus pytest. Used by CI and by
+# `pytest tests/integration` from the repo root.
+-r services/household/requirements.txt
+-r services/fairness/requirements.txt
+pytest==9.1.1

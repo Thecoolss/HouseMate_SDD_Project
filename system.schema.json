@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "housemate-system.schema.json",
+  "title": "HouseMate system description",
+  "$comment": "STAND-IN. The course's own system.schema.json was not available when this was written, so this mirrors the structure of the example in the Assignment 2 brief (section 8a), adapted to this deployment (UI on a Storage static website, Container Apps, serverless Azure SQL). Replace this file with the provided schema and fix any system.yaml fields it rejects.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["student", "prefix", "public_url", "ui", "azure", "services"],
+  "properties": {
+    "student": { "type": "string", "pattern": "^[a-z0-9.]+$" },
+    "prefix": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "public_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "storage_account", "calls"],
+      "properties": {
+        "path": { "type": "string" },
+        "storage_account": { "type": "string", "pattern": "^[a-z0-9]{3,24}$" },
+        "calls": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      }
+    },
+    "azure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "region",
+        "resource_group",
+        "container_apps_environment",
+        "sql_server",
+        "managed_identity",
+        "registry"
+      ],
+      "properties": {
+        "region": { "type": "string" },
+        "resource_group": { "type": "string" },
+        "container_apps_environment": { "type": "string" },
+        "sql_server": { "type": "string" },
+        "managed_identity": { "type": "string" },
+        "registry": { "type": "string" }
+      }
+    },
+    "services": {
+      "type": "object",
+      "minProperties": 2,
+      "maxProperties": 2,
+      "additionalProperties": { "$ref": "#/definitions/service" }
+    }
+  },
+  "definitions": {
+    "env": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description"],
+      "properties": {
+        "default": { "type": ["string", "number", "boolean"] },
+        "secret": { "type": "boolean" },
+        "description": { "type": "string" }
+      },
+      "not": { "required": ["default", "secret"], "properties": { "secret": { "const": true } } }
+    },
+    "call": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "url_env", "endpoints", "timeout_s", "on_failure"],
+      "properties": {
+        "service": { "type": "string" },
+        "url_env": { "type": "string" },
+        "endpoints": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^(GET|POST|PUT|PATCH|DELETE) /" }
+        },
+        "timeout_s": { "type": "number", "exclusiveMinimum": 0 },
+        "on_failure": { "type": "string", "minLength": 1 }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "description",
+        "path",
+        "openapi",
+        "port_default",
+        "health",
+        "migrations",
+        "env",
+        "calls",
+        "azure"
+      ],
+      "properties": {
+        "description": { "type": "string" },
+        "path": { "type": "string" },
+        "openapi": { "type": "string" },
+        "port_default": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "health": { "type": "string", "pattern": "^/" },
+        "migrations": { "type": "string" },
+        "env": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/definitions/env" }
+        },
+        "calls": { "type": "array", "items": { "$ref": "#/definitions/call" } },
+        "azure": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["container_app", "sql_database", "min_replicas", "max_replicas"],
+          "properties": {
+            "container_app": { "type": "string" },
+            "sql_database": { "type": "string" },
+            "min_replicas": { "type": "integer", "const": 0 },
+            "max_replicas": { "type": "integer", "const": 1 }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,4 +1,7 @@
-# Test tools. Not installed in the Docker image.
+# Test and lint tools. Not installed in the Docker image.
 -r requirements.txt
 pytest==9.1.1
 pytest-cov==7.1.0
+ruff==0.17.5
+# Reads openapi.yaml in the tests that check the document against the registered routes.
+PyYAML==6.0.3

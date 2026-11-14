@@ -1,101 +1,114 @@
-from datetime import timedelta
+"""calculate_fairness with the household service stubbed at the seam.
+
+This is the Assignment 1 worked example. The real HTTP hop to household is covered by the
+cross-seam integration test in tests/integration at the repo root.
+"""
+
+from datetime import datetime, timedelta
 
 import pytest
 
 from app import db
-from app.domain2.services import calculate_fairness
+from app.domain2 import services
 from app.models import ContributionScore
-from app.time_utils import utc_now
 
-# DAY-2 WIRE: this worked example seeds its data by driving the HOUSEHOLD domain
-# (create_task / claim / complete / create_booking), which lives in a separate service.
-# It becomes the cross-seam integration test: it will run against the household service
-# (live over compose, or a stub). Skipped until then so the fairness suite stays green.
-pytestmark = pytest.mark.skip(
-    reason="cross-service; becomes the cross-seam integration test running against household over compose or a stub"
+NOW = datetime(2026, 11, 10, 12, 0)
+
+MEMBERS = [
+    {"id": 1, "username": "alice"},
+    {"id": 2, "username": "bob"},
+    {"id": 3, "username": "charlie"},
+]
+
+CONTRIBUTIONS = {
+    "completed_tasks": [
+        {"user_id": 1, "difficulty": "easy", "completed_at": NOW},
+        {"user_id": 1, "difficulty": "hard", "completed_at": NOW},
+        {"user_id": 2, "difficulty": "medium", "completed_at": NOW},
+    ],
+    "bookings": [{"user_id": 2}],
+    "overdue": [{"user_id": 3, "overdue_tasks": 1}],
+}
+
+
+@pytest.fixture()
+def household(monkeypatch):
+    calls = []
+
+    def fake_members(token):
+        calls.append(("members", token))
+        return MEMBERS
+
+    def fake_contributions(token, start, end, as_of):
+        calls.append(("contributions", token, start, end, as_of))
+        return CONTRIBUTIONS
+
+    monkeypatch.setattr(services, "get_members", fake_members)
+    monkeypatch.setattr(services, "get_contributions", fake_contributions)
+    return calls
+
+
+def test_calculate_fairness_scores_every_member(app, household):
+    scores = services.calculate_fairness(
+        NOW - timedelta(days=10), NOW + timedelta(days=10), calculated_at=NOW, token="tok"
+    )
+
+    by_user = {score.user_id: score for score in scores}
+    assert by_user[1].weighted_score == 4
+    assert by_user[1].tasks_completed == 2
+    assert by_user[1].bookings_count == 0
+    assert by_user[1].contribution_score == pytest.approx(4 / 7 * 100)
+
+    assert by_user[2].weighted_score == 2
+    assert by_user[2].tasks_completed == 1
+    assert by_user[2].bookings_count == 1
+    assert by_user[2].contribution_score == pytest.approx(3 / 7 * 100)
+
+    assert by_user[3].weighted_score == 0
+    assert by_user[3].tasks_completed == 0
+    assert by_user[3].overdue_tasks == 1
+    assert by_user[3].contribution_score == 0
+
+
+def test_calculate_fairness_forwards_the_callers_token(app, household):
+    services.calculate_fairness(NOW - timedelta(days=1), NOW, calculated_at=NOW, token="tok-123")
+
+    assert [call[1] for call in household] == ["tok-123", "tok-123"]
+
+
+def test_recalculating_keeps_historical_snapshots(app, household):
+    start, end = NOW - timedelta(days=10), NOW + timedelta(days=10)
+    services.calculate_fairness(start, end, calculated_at=NOW, token="t")
+    services.calculate_fairness(start, end, calculated_at=NOW + timedelta(minutes=10), token="t")
+
+    rows = ContributionScore.query.order_by(ContributionScore.id).all()
+    assert len(rows) == 6
+    assert [row.user_id for row in rows].count(1) == 2
+
+
+def test_calculate_fairness_stores_nothing_when_household_fails(app, monkeypatch):
+    from app.seam import HouseholdUnavailable
+
+    def down(token):
+        raise HouseholdUnavailable("down")
+
+    monkeypatch.setattr(services, "get_members", down)
+
+    with pytest.raises(HouseholdUnavailable):
+        services.calculate_fairness(NOW - timedelta(days=1), NOW, calculated_at=NOW, token="t")
+
+    assert db.session.query(ContributionScore).count() == 0
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "calculated_at", "message"),
+    [
+        ("2026-01-01", NOW, NOW, "must use datetime"),
+        (NOW, "2026-01-01", NOW, "must use datetime"),
+        (NOW, NOW - timedelta(days=1), NOW, "period is invalid"),
+        (NOW - timedelta(days=1), NOW, "yesterday", "calculation time is invalid"),
+    ],
 )
-services = None  # provided by the household service
-
-
-def _make_user(app, username):
-    with app.app_context():
-        user = User(username=username)
-        user.set_password("test-password-123")
-        db.session.add(user)
-        db.session.commit()
-        return user.id
-
-
-def test_calculate_fairness_and_keep_historical_snapshots(app):
-    alice_id = _make_user(app, "alice")
-    bob_id = _make_user(app, "bob")
-    charlie_id = _make_user(app, "charlie")
-
-    with app.app_context():
-        alice = db.session.get(User, alice_id)
-        bob = db.session.get(User, bob_id)
-        charlie = db.session.get(User, charlie_id)
-        now = utc_now()
-        period_start = now - timedelta(days=10)
-        period_end = now + timedelta(days=10)
-
-        task_a1 = services.create_task(alice, "Task A1", "", "easy")
-        services.claim_task(alice, task_a1.id)
-        services.mark_complete(alice, task_a1.id)
-
-        task_a2 = services.create_task(alice, "Task A2", "", "hard")
-        services.claim_task(alice, task_a2.id)
-        services.mark_complete(alice, task_a2.id)
-
-        task_b1 = services.create_task(bob, "Task B1", "", "medium")
-        services.claim_task(bob, task_b1.id)
-        services.mark_complete(bob, task_b1.id)
-
-        services.create_booking(
-            bob,
-            "laundry",
-            now + timedelta(hours=1),
-            now + timedelta(hours=2),
-        )
-
-        first_scores = calculate_fairness(
-            period_start,
-            period_end,
-            calculated_at=now + timedelta(minutes=5),
-        )
-
-        by_user = {score.user_id: score for score in first_scores}
-
-        assert by_user[alice.id].weighted_score == 4
-        assert by_user[alice.id].tasks_completed == 2
-        assert by_user[alice.id].bookings_count == 0
-        assert by_user[alice.id].contribution_score == (4 / 7) * 100
-
-        assert by_user[bob.id].weighted_score == 2
-        assert by_user[bob.id].tasks_completed == 1
-        assert by_user[bob.id].bookings_count == 1
-        assert by_user[bob.id].contribution_score == (3 / 7) * 100
-
-        assert by_user[charlie.id].weighted_score == 0
-        assert by_user[charlie.id].tasks_completed == 0
-        assert by_user[charlie.id].bookings_count == 0
-        assert by_user[charlie.id].contribution_score == 0
-
-        calculate_fairness(
-            period_start,
-            period_end,
-            calculated_at=now + timedelta(minutes=15),
-        )
-
-        rows = ContributionScore.query.order_by(ContributionScore.user_id.asc(), ContributionScore.id.asc()).all()
-        assert len(rows) == 6
-        alice_rows = [row for row in rows if row.user_id == alice.id]
-        bob_rows = [row for row in rows if row.user_id == bob.id]
-        charlie_rows = [row for row in rows if row.user_id == charlie.id]
-
-        assert len(alice_rows) == 2
-        assert len(bob_rows) == 2
-        assert len(charlie_rows) == 2
-        assert alice_rows[0].weighted_score == 4
-        assert bob_rows[0].weighted_score == 2
-        assert charlie_rows[0].weighted_score == 0
+def test_calculate_fairness_rejects_invalid_inputs(app, household, start, end, calculated_at, message):
+    with pytest.raises(ValueError, match=message):
+        services.calculate_fairness(start, end, calculated_at=calculated_at, token="t")

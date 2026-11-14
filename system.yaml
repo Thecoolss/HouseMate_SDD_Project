@@ -1,0 +1,74 @@
+# yaml-language-server: $schema=./system.schema.json
+#
+# Describes the system as built and as deployed. CI validates this file against
+# system.schema.json, and tests/test_system_description.py checks it against the code:
+# every env var a service reads is listed, and every cross-seam endpoint exists in the
+# other service's openapi.yaml.
+student: sdroubi.ieu2024
+prefix: sdroubi-ieu2024
+# TODO(azure): replace with the storage static website URL once the account exists
+# (https://<storage_account>.<zone>.web.core.windows.net). Until then this is a placeholder.
+public_url: https://sdroubiieu2024ui.z6.web.core.windows.net
+ui:
+  path: ui
+  # Storage account names allow only lower-case letters and digits, so no hyphens here.
+  storage_account: sdroubiieu2024ui
+  calls: [household, fairness]
+azure:
+  region: francecentral
+  resource_group: rg-sdroubi-ieu2024
+  container_apps_environment: sdroubi-ieu2024-env
+  sql_server: sdroubi-ieu2024-sql
+  managed_identity: sdroubi-ieu2024-deploy
+  registry: ghcr.io/thecoolss
+services:
+  household:
+    description: Users, authentication, tasks and bookings. Issues the bearer tokens both services verify.
+    path: services/household
+    openapi: services/household/openapi.yaml
+    port_default: 5000
+    health: /health
+    migrations: services/household/migrations
+    env:
+      PORT: { default: 5000, description: Port the service listens on }
+      DATABASE_URL: { secret: true, description: "Connection string of the household database (mssql+pymssql://...). When unset the service falls back to a SQLite file in DATA_DIR." }
+      DATA_DIR: { default: ./data, description: Folder for the SQLite fallback database; only used when DATABASE_URL is unset }
+      AUTH_SECRET: { secret: true, description: Signs the bearer tokens. Must equal the fairness service's value. The service refuses to start without it }
+      TOKEN_MAX_AGE_S: { default: 259200, description: Seconds a token stays valid (3 days) }
+      CORS_ORIGIN: { default: "http://localhost:8080", description: The only browser origin allowed to call the service (the UI) }
+      HOUSEHOLD_TIMEZONE: { default: Europe/Paris, description: Time zone applied to datetimes sent without a zone }
+      GIT_SHA: { default: dev, description: Commit SHA reported by /health }
+    calls: []
+    azure:
+      container_app: sdroubi-ieu2024-household
+      sql_database: sdroubi-ieu2024-household-db
+      min_replicas: 0
+      max_replicas: 1
+  fairness:
+    description: Contribution scoring and its historical snapshots.
+    path: services/fairness
+    openapi: services/fairness/openapi.yaml
+    port_default: 5001
+    health: /health
+    migrations: services/fairness/migrations
+    env:
+      PORT: { default: 5001, description: Port the service listens on }
+      DATABASE_URL: { secret: true, description: "Connection string of the fairness database (mssql+pymssql://...). When unset the service falls back to a SQLite file in DATA_DIR." }
+      DATA_DIR: { default: ./data, description: Folder for the SQLite fallback database; only used when DATABASE_URL is unset }
+      AUTH_SECRET: { secret: true, description: Verifies the bearer tokens household issues. Must equal the household service's value. The service refuses to start without it }
+      TOKEN_MAX_AGE_S: { default: 259200, description: Seconds a token stays valid (3 days) }
+      HOUSEHOLD_URL: { default: "http://localhost:5000", description: Base URL of the household service (docker compose sets http://household:5000) }
+      HOUSEHOLD_TIMEOUT_S: { default: 5.0, description: Timeout in seconds for every call to household }
+      CORS_ORIGIN: { default: "http://localhost:8080", description: The only browser origin allowed to call the service (the UI) }
+      GIT_SHA: { default: dev, description: Commit SHA reported by /health }
+    calls:
+      - service: household
+        url_env: HOUSEHOLD_URL
+        endpoints: ["GET /internal/users", "GET /internal/contributions"]
+        timeout_s: 5
+        on_failure: "GET /fairness still answers from stored snapshots with household_available false and no usernames. POST /fairness/recalculate returns 503 with a clear message and stores nothing."
+    azure:
+      container_app: sdroubi-ieu2024-fairness
+      sql_database: sdroubi-ieu2024-fairness-db
+      min_replicas: 0
+      max_replicas: 1

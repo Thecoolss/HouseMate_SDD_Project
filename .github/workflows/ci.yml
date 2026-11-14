@@ -7,6 +7,7 @@ on:
   pull_request:
 
 jobs:
+  # Unit and API tests per service, with a coverage gate.
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -28,12 +29,88 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
-      - name: Run tests
-        run: python -m pytest -q
+      # Same rules as ruff.toml at the repo root.
+      - name: Lint
+        run: ruff check .
+
+      # Fails the job if the service's code is below 70% covered.
+      - name: Test with coverage gate
+        run: python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=70
+
+  # system.yaml against its schema, each openapi.yaml against the OpenAPI spec, and the
+  # checks that both documents still match the code (env vars, endpoints, compose).
+  system-description:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install validators
+        run: pip install check-jsonschema==0.39.0 openapi-spec-validator==0.9.0 pytest==9.1.1 PyYAML==6.0.3 jsonschema==4.26.0
+
+      - name: Validate system.yaml against system.schema.json
+        run: check-jsonschema --schemafile system.schema.json system.yaml
+
+      - name: Validate OpenAPI documents
+        run: |
+          openapi-spec-validator services/household/openapi.yaml
+          openapi-spec-validator services/fairness/openapi.yaml
+
+      - name: Check the documents match the code
+        run: python -m pytest -q tests/test_system_description.py
+
+  # Starts the real household and fairness services and tests across the HTTP seam,
+  # including what each side does when the other is stopped.
+  integration:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-integration.txt
+            services/*/requirements.txt
+
+      - name: Install both services' dependencies
+        run: pip install -r requirements-integration.txt
+
+      - name: Cross-seam integration tests
+        run: python -m pytest -v tests/integration
+
+  # The whole compose stack on a real SQL Server container: migrations, db-init, the
+  # cross-seam flow and partial failure. Never touches Azure SQL.
+  compose-smoke:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Throwaway credentials for this run only. Letters and digits, so they satisfy SQL
+      # Server's password policy and need no escaping inside DATABASE_URL.
+      - name: Create a throwaway .env
+        run: |
+          pw() { echo "Ci$(openssl rand -hex 12)9"; }
+          {
+            echo "MSSQL_SA_PASSWORD=$(pw)"
+            echo "HOUSEHOLD_DB_PASSWORD=$(pw)"
+            echo "FAIRNESS_DB_PASSWORD=$(pw)"
+            echo "AUTH_SECRET=$(openssl rand -hex 32)"
+          } > .env
+
+      # The script tears its own stack down (volume included) when it exits.
+      - name: Smoke-test the stack
+        run: bash scripts/smoke_compose.sh
 
   images:
-    # Only build images from code whose tests passed.
-    needs: test
+    # Only build images from code that passed every check.
+    needs: [test, system-description, integration, compose-smoke]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
