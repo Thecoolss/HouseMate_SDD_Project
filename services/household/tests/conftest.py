@@ -30,3 +30,19 @@ def app(tmp_path):
 @pytest.fixture()
 def client(app):
     return app.test_client()
+
+
+@pytest.fixture()
+def login(app):
+    """Create a user and return the Authorization header carrying their token."""
+    from app.models import User
+    from app.tokens import issue_token
+
+    def make(username):
+        user = User(username=username)
+        user.set_password("pw")
+        db.session.add(user)
+        db.session.commit()
+        return {"Authorization": f"Bearer {issue_token(user)}"}
+
+    return make

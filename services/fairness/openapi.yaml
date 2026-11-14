@@ -1,0 +1,140 @@
+openapi: 3.0.3
+info:
+  title: HouseMate fairness service
+  version: 1.0.0
+  description: >
+    Contribution scoring. Verifies the bearer token household issues, and calls the household
+    service's /internal/users and /internal/contributions (see services/household/openapi.yaml)
+    when it recalculates or needs member names.
+servers:
+  - url: http://localhost:5001
+    description: docker compose
+
+tags:
+  - name: fairness
+  - name: operations
+
+paths:
+  /fairness:
+    get:
+      tags: [fairness]
+      summary: Latest contribution snapshot for each member
+      description: >
+        Answers from this service's own data. If the household service is down it still
+        returns 200 with household_available false and null usernames, and only members
+        that already have a snapshot are listed.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: One row per member.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FairnessView" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /fairness/recalculate:
+    post:
+      tags: [fairness]
+      summary: Calculate and store a new snapshot for every member
+      description: Covers the last 30 days up to now. Appends rows; earlier snapshots are kept.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: The snapshots just stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scores]
+                properties:
+                  scores:
+                    type: array
+                    items: { $ref: "#/components/schemas/Score" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503":
+          description: The household service could not be reached, so nothing was calculated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /health:
+    get:
+      tags: [operations]
+      summary: Liveness and database check
+      description: 200 when this service can read and write its own database, 503 otherwise. Does not look at the household service.
+      responses:
+        "200":
+          description: Healthy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: The database is unreachable or not writable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The token issued by the household service at /login or /register.
+
+  responses:
+    Unauthorized:
+      description: Missing, invalid or expired token.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    Snapshot:
+      type: object
+      required: [period_start, period_end, tasks_completed, weighted_score, bookings_count, contribution_score, calculated_at]
+      properties:
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        tasks_completed: { type: integer }
+        weighted_score: { type: number }
+        bookings_count: { type: integer }
+        overdue_tasks: { type: integer, nullable: true }
+        contribution_score: { type: number, description: "Percentage of the household's total, 0 to 100." }
+        calculated_at: { type: string, format: date-time }
+    Score:
+      allOf:
+        - $ref: "#/components/schemas/Snapshot"
+        - type: object
+          required: [user_id]
+          properties:
+            user_id: { type: integer }
+    FairnessRow:
+      type: object
+      required: [user_id, username, snapshot]
+      properties:
+        user_id: { type: integer }
+        username: { type: string, nullable: true, description: Null when household is unavailable. }
+        snapshot:
+          nullable: true
+          description: Null when no calculation exists for this member yet.
+          allOf:
+            - $ref: "#/components/schemas/Snapshot"
+    FairnessView:
+      type: object
+      required: [household_available, rows]
+      properties:
+        household_available: { type: boolean }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/FairnessRow" }
+    Health:
+      type: object
+      required: [status, db, version]
+      properties:
+        status: { type: string, enum: [ok, error] }
+        db: { type: string, enum: [ok, error] }
+        version: { type: string, description: The git SHA this build came from. }
