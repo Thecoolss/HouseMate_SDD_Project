@@ -6,16 +6,15 @@
 # other service's openapi.yaml.
 student: sdroubi.ieu2024
 prefix: sdroubi-ieu2024
-# TODO(azure): replace with the storage static website URL once the account exists
-# (https://<storage_account>.<zone>.web.core.windows.net). Until then this is a placeholder.
-public_url: https://sdroubiieu2024ui.z6.web.core.windows.net
+# Reserved endpoint; populated by the first successful CD run.
+public_url: https://sdroubiieu2024ui.z1.web.core.windows.net
 ui:
   path: ui
   # Storage account names allow only lower-case letters and digits, so no hyphens here.
   storage_account: sdroubiieu2024ui
   calls: [household, fairness]
 azure:
-  region: francecentral
+  region: germanywestcentral
   resource_group: rg-sdroubi-ieu2024
   container_apps_environment: sdroubi-ieu2024-env
   sql_server: sdroubi-ieu2024-sql
@@ -37,6 +36,7 @@ services:
       TOKEN_MAX_AGE_S: { default: 259200, description: Seconds a token stays valid (3 days) }
       CORS_ORIGIN: { default: "http://localhost:8080", description: The only browser origin allowed to call the service (the UI) }
       HOUSEHOLD_TIMEZONE: { default: Europe/Paris, description: Time zone applied to datetimes sent without a zone }
+      DB_CONNECT_RETRY_S: { default: 90, description: Budget in seconds for retrying transient SQL connection failures; individual login attempts time out after 5 seconds }
       GIT_SHA: { default: dev, description: Commit SHA reported by /health }
     calls: []
     azure:
@@ -60,6 +60,7 @@ services:
       HOUSEHOLD_URL: { default: "http://localhost:5000", description: Base URL of the household service (docker compose sets http://household:5000) }
       HOUSEHOLD_TIMEOUT_S: { default: 5.0, description: Timeout in seconds for every call to household }
       CORS_ORIGIN: { default: "http://localhost:8080", description: The only browser origin allowed to call the service (the UI) }
+      DB_CONNECT_RETRY_S: { default: 90, description: Budget in seconds for retrying transient SQL connection failures; individual login attempts time out after 5 seconds }
       GIT_SHA: { default: dev, description: Commit SHA reported by /health }
     calls:
       - service: household

@@ -12,3 +12,6 @@ data/
 .env
 *Zone.Identifier
 cloud_ins.md
+
+# Local Azure credentials and generated deployment files
+.azure-local/

@@ -25,8 +25,8 @@ USER appuser
 
 EXPOSE 5001
 
-HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=3s --start-period=120s --retries=3 \
   CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"PORT\"]}/health', timeout=2)" || exit 1
 
 
-CMD exec gunicorn --bind 0.0.0.0:${PORT} "app:create_app()"
+CMD exec gunicorn --workers 1 --threads 4 --timeout 210 --bind 0.0.0.0:${PORT} "app:create_app()"

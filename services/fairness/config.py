@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+from sqlalchemy.pool import NullPool
+
 
 def _database_url():
     # In compose and on Azure, DATABASE_URL points at this service's SQL Server database,
@@ -21,7 +23,15 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     # Test each pooled connection before use, so a connection dropped by the database
     # (restart, idle timeout) is replaced instead of failing the request.
+    DB_CONNECT_RETRY_S = float(os.environ.get("DB_CONNECT_RETRY_S", 90))
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
+    if SQLALCHEMY_DATABASE_URI.startswith("mssql"):
+        # No idle connections keeping serverless SQL awake. A fresh connection retries
+        # transient resume failures; invalid credentials and SQL errors fail immediately.
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            "poolclass": NullPool,
+            "connect_args": {"login_timeout": 5, "timeout": 15, "encryption": "require"},
+        }
 
     # Verifies the bearer tokens household issues. Must equal household's AUTH_SECRET.
     # It is a secret, so it has no default.

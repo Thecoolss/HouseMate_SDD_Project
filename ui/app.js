@@ -45,7 +45,7 @@ class ApiError extends Error {
 
 // Every outbound call has a timeout, attaches the bearer token, and normalises failures.
 async function apiFetch(baseUrl, path, options = {}) {
-  const { timeoutMs = 5000, ...rest } = options;
+  const { timeoutMs = CONFIG.REQUEST_TIMEOUT_MS || 5000, ...rest } = options;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
