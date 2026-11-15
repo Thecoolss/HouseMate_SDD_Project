@@ -80,7 +80,7 @@ services:
 
   # The static UI, served by a stock nginx with the ui/ folder mounted read-only.
   # No Dockerfile and not a service container ; on Azure this becomes
-  # a Static Web App. The browser loads these files, then calls the two services directly.
+  # a Storage static website (updated course instructions). The browser loads these files, then calls the two services directly.
   ui:
     image: nginx:1.27-alpine
     ports:

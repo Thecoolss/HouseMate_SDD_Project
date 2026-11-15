@@ -21,7 +21,7 @@ def create_app(test_config=None):
     # Only the static UI's origin may call this service from a browser.
     CORS(app, origins=[app.config["CORS_ORIGIN"]])
 
-    # Importing the models package registers every model with SQLAlchemy before create_all().
+    # Importing the models package registers every model with SQLAlchemy before migrations run.
     from app import models  # noqa: F401
     from app.domain2 import bp as domain2_bp
     from app.observability import init_request_logging, register_health
@@ -45,6 +45,9 @@ def create_app(test_config=None):
     from app.migrations import run_migrations
 
     with app.app_context():
+        from app.database import install_connection_retry
+
+        install_connection_retry(db.engine, app.config["DB_CONNECT_RETRY_S"])
         run_migrations(db.engine)
 
     return app
