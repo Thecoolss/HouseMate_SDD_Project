@@ -57,7 +57,7 @@ az sql server firewall-rule create -g "$RESOURCE_GROUP" -s "$SQL_SERVER" \
 for service in household fairness; do
   az sql db create -g "$RESOURCE_GROUP" -s "$SQL_SERVER" -n "$PREFIX-$service-db" \
     --edition GeneralPurpose --family Gen5 --capacity 1 --compute-model Serverless \
-    --min-capacity 0.5 --auto-pause-delay 60 --max-size 2GB \
+    --min-capacity 0.5 --auto-pause-delay 15 --max-size 2GB \
     --backup-storage-redundancy Local --zone-redundant false -o none
  done
 
