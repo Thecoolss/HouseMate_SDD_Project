@@ -1,312 +1,211 @@
-# HouseMate
+# HouseMate — Assignment 2
 
-HouseMate is a small, server-rendered household management application. Housemates can coordinate household tasks, reserve shared resources, and view contribution snapshots.
+HouseMate manages shared household tasks and bookings, and calculates each member's
+contribution. The Assignment 1 Flask monolith is now two Flask JSON services with a
+plain HTML/JavaScript UI. No new feature domain was added.
 
-## Features
-
-- Register and log in with a username and password.
-- Create household tasks, claim pending tasks, and mark assigned tasks complete.
-- Reserve shared resources and reject overlapping bookings.
-- Calculate and retain contribution snapshots for a selected period.
-
-## Architecture
-
-The application runs as one Flask process and persists data in SQLite.
-
-- **Domain 1 — Household coordination** owns task and booking operations, including their validation and authorization rules.
-- **Domain 2 — Contribution analytics** calculates and persists contribution snapshots.
-- Domain 2 obtains completed-task, booking, and overdue-task data through functions exposed by Domain 1 services. This is the current modular seam between the domains.
-- Flask routes translate HTTP requests into service calls; SQLAlchemy models represent the persisted data.
-- `User` is shared identity, created through `app/auth`. Domain 2 reads it only to list household members and show usernames.
-
-### Architecture diagram
+- **Household** owns users, signed bearer-token authentication, tasks and bookings.
+- **Fairness** owns historical contribution snapshots. It obtains users and contribution
+  inputs from household over HTTP; it never reads household's database.
+- Completing tasks earns easy/medium/hard weights of 1/2/3. Each booking adds 1.
+  Contribution percentages divide each member's total by the household total. Overdue
+  tasks are reported separately and do not reduce the percentage.
 
 ```mermaid
-flowchart TB
-    browser["Browser<br/>(server-rendered HTML forms)"]
-
-    subgraph process["Single Flask process: python app.py (create_app, 0.0.0.0:PORT)"]
-        direction TB
-
-        subgraph routes["HTTP layer: blueprints"]
-            auth_routes["auth/routes.py<br/>/register, /login, /logout"]
-            d1_routes["domain1/routes.py<br/>/tasks, /bookings"]
-            d2_routes["domain2/routes.py<br/>/fairness, /fairness/recalculate"]
-        end
-
-        time_utils["time_utils.py<br/>local time to UTC conversion"]
-
-        subgraph d1["Domain 1: Household coordination"]
-            d1_services["domain1/services.py<br/>create_task, claim_task, mark_complete,<br/>create_booking, update_booking, ..."]
-            d1_rules["domain1/rules.py<br/>validate_title, validate_difficulty,<br/>validate_booking"]
-        end
-
-        subgraph d2["Domain 2: Contribution analytics"]
-            d2_services["domain2/services.py<br/>calculate_fairness"]
-            d2_calc["domain2/calculations.py<br/>task_weight,<br/>calculate_contribution_percentages"]
-        end
-
-        subgraph models["models/ (Flask-SQLAlchemy)"]
-            user_model["User"]
-            task_model["Task"]
-            booking_model["Booking"]
-            score_model["ContributionScore"]
-        end
-    end
-
-    sqlite[("SQLite<br/>DATA_DIR/app.db")]
-
-    browser -->|"HTTP + session cookie + CSRF token"| routes
-    auth_routes --> user_model
-    d1_routes --> time_utils
-    d1_routes -->|"usernames for display"| user_model
-    d1_routes --> d1_services
-    d1_services --> d1_rules
-    d1_services --> task_model
-    d1_services --> booking_model
-    d2_routes --> d2_services
-    d2_routes -->|"latest snapshot per user"| score_model
-    d2_services --> d2_calc
-    d2_services -->|"list household members"| user_model
-    d2_services --> score_model
-    d2_services ==>|"SERVICE SEAM<br/>get_completed_task_contributions<br/>get_booking_contributions<br/>get_overdue_task_counts"| d1_services
-    models --> sqlite
+flowchart LR
+    UI[Static HTML/JS UI] -->|Bearer token / JSON| H[Household Flask API]
+    UI -->|Bearer token / JSON| F[Fairness Flask API]
+    F -->|GET /internal/users and /internal/contributions| H
+    H --> HD[(Household SQL database)]
+    F --> FD[(Fairness SQL database)]
 ```
 
-Domain 2 never queries `Task` or `Booking` directly. It receives plain dictionaries from the three seam functions in `domain1/services.py`. If the domains are split into separate services later, those function calls are where HTTP calls would go.
+The two services share `AUTH_SECRET` so fairness can verify household's tokens locally.
+Fairness forwards the same token to household for cross-service requests. With household
+stopped, fairness still serves its stored snapshots with `household_available: false`
+and missing usernames; recalculation returns `503` without writing a partial snapshot.
+With fairness stopped, household continues serving its domain.
 
-### Database diagram
+## Run locally
 
-The database contains four tables. Domain 1 owns `task` and `booking`, Domain 2 owns `contribution_score`, and `user` is shared identity.
-
-```mermaid
-erDiagram
-    user ||--o{ task : "creates (created_by)"
-    user |o--o{ task : "is assigned (assigned_to)"
-    user ||--o{ booking : "creates (created_by)"
-    user ||--o{ contribution_score : "has snapshots (user_id)"
-
-    user {
-        INTEGER id PK
-        VARCHAR username UK "80 chars, NOT NULL"
-        VARCHAR password_hash "255 chars, NOT NULL"
-    }
-
-    task {
-        INTEGER id PK
-        VARCHAR title "200 chars, NOT NULL"
-        TEXT description "NULL"
-        VARCHAR difficulty "20 chars, NOT NULL, easy/medium/hard"
-        VARCHAR status "20 chars, NOT NULL, pending/done"
-        INTEGER assigned_to FK "NULL, user.id"
-        INTEGER created_by FK "NOT NULL, user.id"
-        DATETIME due_date "NULL, stored in UTC"
-        DATETIME created_at "NOT NULL, UTC"
-        DATETIME completed_at "NULL, UTC"
-    }
-
-    booking {
-        INTEGER id PK
-        VARCHAR resource "120 chars, NOT NULL, laundry/kitchen/living_room"
-        DATETIME start_time "NOT NULL, UTC"
-        DATETIME end_time "NOT NULL, UTC"
-        INTEGER created_by FK "NOT NULL, user.id"
-        DATETIME created_at "NOT NULL, UTC"
-    }
-
-    contribution_score {
-        INTEGER id PK
-        INTEGER user_id FK "NOT NULL, user.id"
-        DATE period_start "NOT NULL"
-        DATE period_end "NOT NULL"
-        INTEGER tasks_completed "NOT NULL"
-        FLOAT weighted_score "NOT NULL"
-        INTEGER bookings_count "NOT NULL"
-        INTEGER overdue_tasks "NULL"
-        FLOAT contribution_score "NOT NULL"
-        DATETIME calculated_at "NOT NULL, UTC"
-    }
-```
-
-`difficulty` and `status` are enforced by SQLite `CHECK` constraints (`ck_task_difficulty`, `ck_task_status`). The allowed `resource` values are enforced in `domain1/rules.py`, not in the database. The models declare no SQLAlchemy relationship properties; the links above are the foreign-key columns only.
-
-## Task lifecycle
-
-An unassigned task has `status="pending"` and no `assigned_to` user. Claiming it sets `assigned_to` while it remains pending. Completing it changes its status to `"done"` and records `completed_at`.
-
-## Contribution calculation
-
-Completed tasks contribute points according to difficulty: easy = 1, medium = 2, hard = 3. A booking whose start time falls within the calculation period contributes one point to its creator. Each user's contribution percentage is their points divided by the household total, multiplied by 100. If the household has no points in the period, each user's percentage is zero. Overdue assigned tasks are counted separately and do not reduce the contribution percentage. Each calculation adds a new historical snapshot.
-
-## Requirements
-
-- Python 3.11 or newer
-- Packages listed in the root `requirements.txt`
-- Docker, only if you run the app in a container
-
-## Setup
-
-Clone the repository and enter its directory:
+Requires Docker Engine/Desktop with Compose support. On Windows, enable Docker Desktop's
+integration for the WSL distribution where this checkout lives.
 
 ```bash
-git clone https://github.com/Thecoolss/HouseMate_SDD_Project.git
-cd HouseMate_SDD_Project
+cp .env.example .env
+# Edit .env and set all four secrets to strong values. Do not commit it.
+docker compose up --build
 ```
 
-Create and activate a virtual environment:
+Open <http://localhost:8080>. APIs listen on ports 5000 and 5001. A stock nginx serves
+`ui/`; SQL Server and a one-off `db-init` service provide separate databases and logins.
+`db-init` retries startup races and is idempotent. The named SQL volume preserves data
+across `docker compose down` and restarts. `docker compose down -v` destroys that data.
+
+The scripts expect shell-safe passwords in `.env`; use long hexadecimal passwords with
+mixed-case letters and a digit (for example a generated random value prefixed `Hm` and
+suffixed `9`). Arbitrary punctuation needs URL encoding in the Compose connection URLs.
+
+## Run one service without Docker
+
+Python 3.12 is the tested version. From `services/household` (or `services/fairness`):
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-```
-
-On Debian or Ubuntu, if `python3 -m venv` reports that `ensurepip` is not available, install the venv module first (for example `sudo apt install python3.11-venv`, matching your Python version).
-
-On Windows PowerShell, activate it with:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-Install the dependencies:
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-## Configuration
-
-Set environment variables to change application settings without editing source code. These are every setting the application reads. The Docker image sets its own defaults for `PORT` and `DATA_DIR` (the values the provided container template requires).
-
-| Variable | Default (`python app.py`) | Default (Docker image) | Purpose |
-| --- | --- | --- | --- |
-| `PORT` | `5000` | `8000` | Port the server listens on. |
-| `DATA_DIR` | `./data` | `/data` | Directory where the SQLite database `app.db` is stored. The directory is created if needed. |
-| `SECRET_KEY` | `dev-secret` | `dev-secret` | Flask session and CSRF signing key. Set a private, strong value outside local development. |
-| `HOUSEHOLD_TIMEZONE` | `Europe/Paris` | `Europe/Paris` | Timezone used to interpret and display household date-times. |
-
-**SQLite path:** `$DATA_DIR/app.db`, so `./data/app.db` when run directly and `/data/app.db` in the container. The schema is created automatically on first start (`db.create_all()`), which only creates missing tables and never drops or changes existing data. There is no seed data.
-
-For example, on Linux or macOS:
-
-```bash
-export SECRET_KEY="replace-with-a-private-random-value"
-export DATA_DIR="./data"
-export HOUSEHOLD_TIMEZONE="Europe/Paris"
-```
-
-The default secret key is for local development only.
-
-## Run
-
-### Directly on a machine
-
-From the repository root, after the setup steps above, start the application with:
-
-```bash
+pip install -r requirements-dev.txt
+export AUTH_SECRET='replace-with-a-strong-local-secret'
 python app.py
 ```
 
-The application binds to `0.0.0.0` and defaults to port `5000`. Open <http://localhost:5000/register> to register the first user.
+Without `DATABASE_URL`, each service uses its own `./data/app.db` SQLite database. Set
+`HOUSEHOLD_URL` when fairness must reach household somewhere other than
+`http://localhost:5000`. Use the same `AUTH_SECRET` in both processes.
 
-### With Docker
-
-The `Dockerfile` at the repository root is the provided course template with its four `TODO` lines filled in: `python:3.12-slim`, `pip install -r requirements.txt`, an explicit copy of `app.py`, `config.py`, and `app/`, and `python app.py` as the start command. Tests, the virtual environment, `.git`, and local data are not copied into the image.
-
-Build the image and run it with a named volume for the database:
-
-```bash
-docker build -t housemate .
-docker run -p 8000:8000 -v housemate-data:/data housemate
-```
-
-Open <http://localhost:8000/register>. The database lives in the `housemate-data` volume at `/data/app.db`, so it survives the container being removed and recreated.
-
-To use another port or set a real secret key:
-
-```bash
-docker run -e PORT=9000 -p 9000:9000 -e SECRET_KEY="replace-with-a-private-random-value" -v housemate-data:/data housemate
-```
-
-### Container contract evidence (§7)
-
-Output of the provided checker, `container/run.sh`, run against this repository on 2026-10-10:
-
-```text
-=== SDD Assignment 1 contract check ===
-Repository: /home/coolss/Uni_Projects/sdd/House_Project
-==> Repository shape
-  PASS  one Dockerfile, one manifest (requirements.txt)
-==> Build from a clean context, no build args
-  PASS  image built
-  PASS  image size 60 MB
-==> Start on PORT=8000 and reach it from the host
-  PASS  HTTP 302 from http://localhost:8000/
-==> SQLite file under DATA_DIR
-  PASS  found in /data: app.db 
-==> Data persists, and a second boot does not re-seed
-  PASS  volume at /data persists
-  PASS  row counts unchanged across restart: booking=0 contribution_score=0 task=0 user=0 
-==> PORT override is honoured (not hardcoded)
-  PASS  HTTP 302 from http://localhost:9123/
-=== ALL CHECKS PASSED ===
-
-```
-
-`HTTP 302` is expected: `/` redirects anonymous users to `/login`.
-
-When running the checker from WSL, set `NAME` explicitly (for example `NAME=sdd-housemate ./run.sh .`), because WSL sets `NAME` to the Windows host name, which is not a valid image tag.
+`config.py` reads environment variables; `system.yaml` documents every setting and its
+default. `DATABASE_URL` selects SQL Server on Compose/Azure. CORS allows only
+`CORS_ORIGIN`, which defaults to `http://localhost:8080`. Tokens expire after three days.
+`ui/config.js` contains local API URLs; CD generates a cloud version during publication.
 
 ## Tests and coverage
 
-Run the test suite:
+From each service directory after installing its development requirements:
 
 ```bash
-pytest
+ruff check .
+python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=70
 ```
 
-Coverage is reported two ways: for the complete application, and for the core business logic of the two domains, which is what the 70% target applies to.
+November 15 local results: household 110 tests, 98.95% coverage; fairness 62 tests,
+99.65% coverage. These include paused-database retry recovery, deadlines and rejection
+of permanent connection failures. Test coverage is measured across the `app` package.
 
-### Whole-application coverage
+From the repository root, in an environment containing both services' dependencies:
 
 ```bash
-pytest --cov=app --cov-report=term-missing
+pip install -r requirements-integration.txt
+python -m pytest -q tests/integration
 ```
 
-**Measured on 2026-10-09:** 65 tests passed; whole-application coverage was **72%**. This figure also counts Flask routes, app setup, and the timezone helpers in `app/time_utils.py`.
-
-### Core business-logic coverage (Domain 1 and Domain 2)
+The 10 integration tests start real gunicorn processes with separate SQLite files and
+exercise token forwarding, the worked scoring example, database ownership, and partial
+failure. The full SQL Server smoke test is:
 
 ```bash
-pytest \
-  --cov=app.domain1.services \
-  --cov=app.domain1.rules \
-  --cov=app.domain2.services \
-  --cov=app.domain2.calculations \
-  --cov-report=term-missing
+# Stop your normal stack first to free ports 5000, 5001, 8080.
+bash scripts/smoke_compose.sh
 ```
 
-**Measured on 2026-10-09:** 65 tests passed, with **93% combined coverage** across these four modules.
+It creates and removes a separate `housemate-smoke` Compose project and volume, checks
+migrations, restart persistence, the seam and partial failure. It never connects to Azure.
 
-Coverage can change as the code and tests change; rerun both commands before submitting and update these results if they differ.
+CI also validates both `services/*/openapi.yaml` documents and `system.yaml`, and checks
+they match code. **`system.schema.json` is still a clearly marked local stand-in** until
+the professor supplies the official version. Deployment-render tests check secret
+references, SHA image tags, ports, scaling and health probes without accessing Azure.
 
-## Project structure
+## Azure setup and continuous deployment
 
-```text
-app/
-  auth/        Registration, login, and logout routes
-  domain1/     Task and booking routes, services, and pure validation rules
-  domain2/     Contribution routes, calculation services, and pure calculations
-  models/      SQLAlchemy models for the four SQLite tables
-  templates/   Server-rendered HTML templates
-  static/      CSS
-tests/
-  unit/        Isolated tests for pure validation, calculation, and timezone functions
-  test_*.py    Database-backed service tests and Flask authentication tests
-app.py         Entry point: python app.py
-config.py      Environment-variable configuration
-Dockerfile     Provided container template with its four TODOs filled in
-requirements.txt  Pinned dependencies (the one manifest)
-ADR.md         Architecture decision record log
-AI_USAGE.md    Log of meaningful AI-assisted work
+The November course update uses a **personal Azure for Students subscription**, a
+managed identity for GitHub OIDC, and **Storage static website hosting**, replacing the
+original brief's shared subscription and Static Web Apps. This subscription forbids
+France Central; HouseMate uses **Germany West Central**. Existing pantry/catalog
+resources in another resource group are unrelated and must not be modified.
+
+All HouseMate resources are in `rg-sdroubi-ieu2024`:
+
+| Resource | Name |
+|---|---|
+| Container Apps environment | `sdroubi-ieu2024-env` |
+| Container Apps (created on first CD) | `sdroubi-ieu2024-household`, `sdroubi-ieu2024-fairness` |
+| Logical SQL server | `sdroubi-ieu2024-sql` |
+| SQL databases | `sdroubi-ieu2024-household-db`, `sdroubi-ieu2024-fairness-db` |
+| Storage account | `sdroubiieu2024ui` |
+| Pipeline identity | `sdroubi-ieu2024-deploy` |
+| Log Analytics workspace | `sdroubi-ieu2024-logs` |
+
+Reserved UI endpoint: <https://sdroubiieu2024ui.z1.web.core.windows.net>.
+**The application is not published yet.** The first successful CD will populate this
+website and record the service URLs and commit in the Actions run summary.
+
+One-time setup (Azure CLI and GitHub CLI must be logged in, with permission to create
+resources/role assignments in this subscription and manage this repository's secrets):
+
+```bash
+# Inspect scripts/azure/config.sh first: it fixes subscription, group and resource names.
+bash scripts/azure/setup.sh
+# Python environment needs pymssql from either service's requirements.
+PYTHON=venv/bin/python bash scripts/azure/init-databases.sh
 ```
+
+`setup.sh` creates the supporting resources, the managed identity, its role assignments
+and an OIDC federation for `repo:Thecoolss/HouseMate_SDD_Project:ref:refs/heads/main`.
+It sets GitHub variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
+The identity has Contributor only in HouseMate's resource group and Storage Blob Data
+Contributor on HouseMate's storage account. It cannot assign roles.
+
+Credentials are generated once in `.azure-local/secrets.env` (gitignored, mode 600).
+Keep that file private and backed up securely; do not regenerate it for an existing SQL
+server. Rerunning setup reuses it. The SQL admin credential is not given to CD.
+`init-databases.sh` temporarily allows the caller's public IP, creates each SQL login and
+its database user, verifies cross-database access is denied, removes the temporary rule,
+and sets GitHub secrets `HOUSEHOLD_DATABASE_URL`, `FAIRNESS_DATABASE_URL`, `AUTH_SECRET`.
+It does **not** create application tables or apply migrations. Each login has `db_owner`
+only in its own database so it can run startup migrations. Azure-services firewall
+access remains enabled for Container Apps.
+
+Every push/PR runs lint, per-service tests/coverage, schema checks, HTTP integration,
+SQL Server Compose smoke tests and both image builds. Only a push to `main` publishes
+images, tagged with the full commit SHA. The dependent CD job authenticates with OIDC,
+then runs `scripts/azure/deploy.sh`:
+
+1. Create/update each Container App with that SHA's image, secret references, HTTPS
+   ingress, the exact UI CORS origin, and the configured service URL.
+2. Wait up to five minutes per service for `/health` to report `200`, healthy database
+   access and that **same SHA**, not a previous revision.
+3. Stage the UI, generate `config.js` with the two HTTPS URLs and a 230-second request
+   timeout, upload to `$web` using identity-based authorization, and verify config.js.
+
+Deployments are serialized and are not canceled midway by newer runs. PRs cannot use
+the Azure identity. A failed CI gate prevents both image publication and deployment.
+Until these changes are committed, pushed, reviewed and merged, CD cannot execute.
+
+## Cold starts, migrations and cost
+
+Each Container App uses the Consumption profile, minimum zero and maximum one replica,
+one gunicorn worker, and a 210-second worker timeout. Startup probes allow three minutes;
+readiness checks `/health`, while liveness checks the TCP listener so a database outage
+does not repeatedly restart the process.
+
+SQL connections require encryption. A new connection retries only recognized transient
+errors (including Azure SQL 40613) with 1/2/4/8/10-second capped backoff, for a 90-second
+budget plus at most one 5-second login attempt. Invalid credentials/database permissions
+fail immediately. SQL statements and migrations themselves are never blindly replayed.
+SQL Server uses `NullPool` to avoid leaving idle pooled sessions open. Fairness's cloud
+HTTP timeout is 90 seconds; local defaults remain short. The browser allows 230 seconds
+for a cloud request and displays an unavailable message when the request fails.
+
+Databases are General Purpose serverless Gen5, minimum 0.5/maximum 1 vCore, 2 GB maximum,
+60-minute idle auto-pause and locally redundant backups. They consume student credits
+while awake; this setup uses regular serverless SQL, not the optional free-limit offer.
+SQL storage/backups and Storage/Log Analytics usage can still cost credit while compute
+is idle. There is no always-on compute plan or paid container registry. Avoid periodic
+external health polling, which would wake the system and prevent idle savings.
+
+Each service runs its numbered dialect-specific migrations at startup and records them
+in `schema_migrations`. Applied files must never be edited. Only `001_init.sql` ships
+initially. To obtain Assignment 2 migration evidence:
+
+1. Merge/deploy the initial version and create real data through the hosted UI.
+2. Record data before the change.
+3. Add a separate `002` migration on a branch, test it, merge and deploy it.
+4. Save the Actions run, migration startup log and retained data afterward.
+
+Single-revision mode and max one replica bound steady-state resources; Azure revisions
+can briefly overlap during rollout. Forward schema changes must remain compatible with
+the previous revision. A database migration lock is needed before allowing concurrent
+migration runners or scaling above one replica. Do not describe maxReplicas as a lock.
+
+For a deployment failure, inspect Actions and `az containerapp logs show` for the named
+HouseMate app. Never dump secrets or connection strings into evidence. Fix a bad schema
+change with a higher-numbered forward migration; reverting an image does not undo SQL.
