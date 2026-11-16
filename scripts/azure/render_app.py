@@ -32,7 +32,6 @@ def render(service, env):
         'location': env['LOCATION'],
         'properties': {
             'managedEnvironmentId': env['ENVIRONMENT_ID'],
-            'workloadProfileName': 'Consumption',
             'configuration': {
                 'activeRevisionsMode': 'Single',
                 'secrets': [
@@ -42,11 +41,11 @@ def render(service, env):
                 'ingress': {
                     'external': True, 'targetPort': port, 'transport': 'auto',
                     'allowInsecure': False,
-                    'traffic': [{'latestRevision': True, 'weight': 100}],
                 },
             },
             'template': {
-                'revisionSuffix': sha[:12] + '-' + env['GITHUB_RUN_ATTEMPT'],
+                # Express manages revisions and traffic automatically. Identify
+                # deployments by the immutable image tag and GIT_SHA instead.
                 'scale': {'minReplicas': 0, 'maxReplicas': 1, 'rules': [{
                     'name': 'http', 'http': {'metadata': {'concurrentRequests': '10'}},
                 }]},
