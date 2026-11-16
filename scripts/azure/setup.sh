@@ -70,7 +70,7 @@ az role assignment create --assignee-object-id "$principal_id" --assignee-princi
   --role 'Storage Blob Data Contributor' --scope "$scope/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT" -o none
 az identity federated-credential create -g "$RESOURCE_GROUP" --identity-name "$DEPLOY_IDENTITY" \
   -n github-main --issuer https://token.actions.githubusercontent.com \
-  --subject "repo:$GITHUB_REPO:ref:refs/heads/main" --audiences api://AzureADTokenExchange -o none
+  --subject "$GITHUB_OIDC_SUBJECT" --audiences api://AzureADTokenExchange -o none
 
 bash scripts/azure/configure-github.sh
 

@@ -13,7 +13,7 @@ spec.loader.exec_module(module)
 @pytest.fixture()
 def env():
     return {
-        'GITHUB_SHA': 'a' * 40, 'GITHUB_RUN_ATTEMPT': '1',
+        'GITHUB_SHA': 'a' * 40,
         'GITHUB_REPOSITORY_OWNER': 'Thecoolss', 'PREFIX': 'sdroubi-ieu2024',
         'LOCATION': 'germanywestcentral', 'ENVIRONMENT_ID': '/environment',
         'UI_ORIGIN': 'https://ui.example', 'HOUSEHOLD_URL': 'https://household.example',
@@ -25,7 +25,6 @@ def env():
 @pytest.mark.parametrize('service,port', [('household', 5000), ('fairness', 5001)])
 def test_deployment_preserves_service_isolation_and_scale_to_zero(env, service, port):
     app = module.render(service, env)['properties']
-    assert app['workloadProfileName'] == 'Consumption'
     assert app['configuration']['activeRevisionsMode'] == 'Single'
     ingress = app['configuration']['ingress']
     assert ingress['external'] and not ingress['allowInsecure'] and ingress['targetPort'] == port
@@ -35,6 +34,7 @@ def test_deployment_preserves_service_isolation_and_scale_to_zero(env, service, 
     container = template['containers'][0]
     assert container['image'] == f'ghcr.io/thecoolss/housemate-{service}:' + 'a' * 40
     variables = {v['name']: v for v in container['env']}
+    assert variables['GIT_SHA']['value'] == env['GITHUB_SHA']
     assert variables['DATABASE_URL'] == {'name': 'DATABASE_URL', 'secretRef': 'database-url'}
     assert variables['AUTH_SECRET'] == {'name': 'AUTH_SECRET', 'secretRef': 'auth-secret'}
     assert variables['CORS_ORIGIN']['value'] == env['UI_ORIGIN']
@@ -45,6 +45,14 @@ def test_deployment_preserves_service_isolation_and_scale_to_zero(env, service, 
     probes = {p['type']: p for p in container['probes']}
     assert probes['Startup']['failureThreshold'] * probes['Startup']['periodSeconds'] > 90
     assert 'tcpSocket' in probes['Liveness']
+
+
+@pytest.mark.parametrize('service', ['household', 'fairness'])
+def test_deployment_omits_unsupported_express_revision_controls(env, service):
+    app = module.render(service, env)['properties']
+    assert 'revisionSuffix' not in app['template']
+    assert 'traffic' not in app['configuration']['ingress']
+    assert 'workloadProfileName' not in app
 
 
 def test_latest_tag_cannot_be_deployed(env):

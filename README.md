@@ -139,7 +139,11 @@ PYTHON=venv/bin/python bash scripts/azure/init-databases.sh
 ```
 
 `setup.sh` creates the supporting resources, the managed identity, its role assignments
-and an OIDC federation for `repo:Thecoolss/HouseMate_SDD_Project:ref:refs/heads/main`.
+and an OIDC federation for
+`repo:Thecoolss@148555406/HouseMate_SDD_Project@1380508437:ref:refs/heads/main`.
+This immutable subject includes GitHub's owner and repository IDs and is configured as
+`GITHUB_OIDC_SUBJECT` in `scripts/azure/config.sh`. Azure requires an exact match with
+the subject claim printed by `azure/login`; omitting the IDs causes `AADSTS700213`.
 It sets GitHub variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
 The identity has Contributor only in HouseMate's resource group and Storage Blob Data
 Contributor on HouseMate's storage account. It cannot assign roles.
@@ -172,7 +176,13 @@ Until these changes are committed, pushed, reviewed and merged, CD cannot execut
 
 ## Cold starts, migrations and cost
 
-Each Container App uses the Consumption profile, minimum zero and maximum one replica,
+The current Container Apps environment is in Express mode and uses consumption compute.
+Express manages revision names and traffic automatically, so the deployment payload
+omits custom revision suffixes, traffic weights and workload profile selection.
+The image tag and `/health` version still identify the exact deployed commit.
+See [Microsoft's Express deployment guidance](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/container-apps-workflows#deploy-to-container-apps-express-preview).
+
+Each Container App requests minimum zero and maximum one replica,
 one gunicorn worker, and a 210-second worker timeout. Startup probes allow three minutes;
 readiness checks `/health`, while liveness checks the TCP listener so a database outage
 does not repeatedly restart the process.

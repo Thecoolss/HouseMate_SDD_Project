@@ -13,3 +13,6 @@ ACA_ENV=${PREFIX}-env
 LOG_WORKSPACE=${PREFIX}-logs
 DEPLOY_IDENTITY=${PREFIX}-deploy
 GITHUB_REPO=Thecoolss/HouseMate_SDD_Project
+# GitHub's immutable OIDC subject includes the owner and repository IDs.
+# Must exactly match the subject claim printed by azure/login for main.
+GITHUB_OIDC_SUBJECT=repo:Thecoolss@148555406/HouseMate_SDD_Project@1380508437:ref:refs/heads/main
