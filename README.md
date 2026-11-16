@@ -125,8 +125,8 @@ All HouseMate resources are in `rg-sdroubi-ieu2024`:
 | Log Analytics workspace | `sdroubi-ieu2024-logs` |
 
 Reserved UI endpoint: <https://sdroubiieu2024ui.z1.web.core.windows.net>.
-**The application is not published yet.** The first successful CD will populate this
-website and record the service URLs and commit in the Actions run summary.
+The application is published. Each successful CD records the service URLs and commit
+in the Actions run summary.
 
 One-time setup (Azure CLI and GitHub CLI must be logged in, with permission to create
 resources/role assignments in this subscription and manage this repository's secrets):
@@ -196,19 +196,23 @@ HTTP timeout is 90 seconds; local defaults remain short. The browser allows 230 
 for a cloud request and displays an unavailable message when the request fails.
 
 Databases are General Purpose serverless Gen5, minimum 0.5/maximum 1 vCore, 2 GB maximum,
-60-minute idle auto-pause and locally redundant backups. They consume student credits
+15-minute idle auto-pause and locally redundant backups. They consume student credits
 while awake; this setup uses regular serverless SQL, not the optional free-limit offer.
 SQL storage/backups and Storage/Log Analytics usage can still cost credit while compute
 is idle. There is no always-on compute plan or paid container registry. Avoid periodic
 external health polling, which would wake the system and prevent idle savings.
 
 Each service runs its numbered dialect-specific migrations at startup and records them
-in `schema_migrations`. Applied files must never be edited. Only `001_init.sql` ships
-initially. To obtain Assignment 2 migration evidence:
+in `schema_migrations`. Applied files must never be edited. Household migration
+`002_add_task_category.sql` adds a non-null `category` to the populated `task` table:
+existing rows are backfilled with `general`, and a `ck_task_category` CHECK constraint
+limits it to `general`, `cleaning`, `cooking`, `shopping` or `maintenance`. Tasks can be
+given a category when created or edited (API and UI); omitting it means `general`.
+Fairness remains on `001_init.sql`. To obtain Assignment 2 migration evidence:
 
 1. Merge/deploy the initial version and create real data through the hosted UI.
 2. Record data before the change.
-3. Add a separate `002` migration on a branch, test it, merge and deploy it.
+3. Merge and deploy the task-category migration only after saving the baseline.
 4. Save the Actions run, migration startup log and retained data afterward.
 
 Single-revision mode and max one replica bound steady-state resources; Azure revisions
@@ -219,3 +223,24 @@ migration runners or scaling above one replica. Do not describe maxReplicas as a
 For a deployment failure, inspect Actions and `az containerapp logs show` for the named
 HouseMate app. Never dump secrets or connection strings into evidence. Fix a bad schema
 change with a higher-numbered forward migration; reverting an image does not undo SQL.
+
+### Evidence for the task-category migration
+
+Before merging, open the live Tasks page, then browser developer tools → Network.
+Select the `GET /tasks` request and copy its **Response** JSON into a local
+`before-tasks.json` file. Preserve the task IDs, titles, statuses and assignees; a
+screenshot of the request list alone does not show those rows. Save the Tasks page
+screenshot too. Do not export authorization headers or tokens with the evidence.
+
+After the PR passes CI and is merged, save the successful Actions run URL and the
+Household console log `migration applied: 002_add_task_category.sql`. Refresh Tasks
+and save `after-tasks.json` and a screenshot: the same IDs and existing values should
+remain, with `category: general` added. A subsequent startup should not reapply `002`.
+The migration has not been proven on Azure until these before/after records exist.
+
+The household unit suite exercises the real SQLite 001 → 002 upgrade with populated
+rows. `scripts/smoke_compose.sh` runs the same preservation check on a disposable SQL
+Server database before starting the services. It also checks that an insert omitting
+category still receives the database default, that every allowed category is accepted
+and any other value is rejected by the constraint, and that a second migration run
+changes nothing. Neither check connects to Azure SQL.

@@ -3,10 +3,23 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.domain1.rules import (
+    VALID_CATEGORIES,
     validate_booking,
+    validate_category,
     validate_difficulty,
     validate_title,
 )
+
+
+@pytest.mark.parametrize("category", sorted(VALID_CATEGORIES))
+def test_validate_category_accepts_supported_values(category):
+    assert validate_category(category) == category
+
+
+@pytest.mark.parametrize("category", ["gardening", "General", "", None, 3])
+def test_validate_category_rejects_unsupported_values(category):
+    with pytest.raises(ValueError, match="Category must be"):
+        validate_category(category)
 
 
 @pytest.mark.parametrize(

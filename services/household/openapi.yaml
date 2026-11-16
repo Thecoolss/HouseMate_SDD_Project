@@ -346,12 +346,17 @@ components:
     Difficulty:
       type: string
       enum: [easy, medium, hard]
+    Category:
+      type: string
+      enum: [general, cleaning, cooking, shopping, maintenance]
+      description: Tasks created before migration 002 were given general.
     Task:
       type: object
-      required: [id, title, difficulty, status, created_by, assigned_to, created_at]
+      required: [id, title, category, difficulty, status, created_by, assigned_to, created_at]
       properties:
         id: { type: integer }
         title: { type: string }
+        category: { $ref: "#/components/schemas/Category" }
         description: { type: string, nullable: true }
         difficulty: { $ref: "#/components/schemas/Difficulty" }
         status: { type: string, enum: [pending, done] }
@@ -367,6 +372,11 @@ components:
       required: [title, difficulty]
       properties:
         title: { type: string, maxLength: 200 }
+        category:
+          allOf:
+            - $ref: "#/components/schemas/Category"
+          nullable: true
+          description: Optional. Omitted or null means general.
         description: { type: string, nullable: true }
         difficulty: { $ref: "#/components/schemas/Difficulty" }
         due_date:
@@ -377,6 +387,7 @@ components:
       type: object
       properties:
         title: { type: string, maxLength: 200 }
+        category: { $ref: "#/components/schemas/Category" }
         description: { type: string, nullable: true }
         difficulty: { $ref: "#/components/schemas/Difficulty" }
         due_date:
