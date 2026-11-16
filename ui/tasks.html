@@ -31,6 +31,15 @@
         <label for="description">Description</label>
         <textarea id="description" name="description" rows="4"></textarea>
 
+        <label for="category">Category</label>
+        <select id="category" name="category" required>
+          <option value="general" selected>General</option>
+          <option value="cleaning">Cleaning</option>
+          <option value="cooking">Cooking</option>
+          <option value="shopping">Shopping</option>
+          <option value="maintenance">Maintenance</option>
+        </select>
+
         <div class="form-grid">
           <div>
             <label for="difficulty">Difficulty</label>
@@ -70,6 +79,7 @@
           document.getElementById("title").value = task ? task.title : "";
           document.getElementById("description").value = task ? task.description || "" : "";
           document.getElementById("difficulty").value = task ? task.difficulty : "medium";
+          document.getElementById("category").value = task ? task.category : "general";
           // A UTC ISO string -> the value a datetime-local input wants (local wall time).
           document.getElementById("due_date").value = task && task.due_date
             ? toLocalInput(task.due_date)
@@ -100,6 +110,7 @@
           const body = {
             title: document.getElementById("title").value.trim(),
             description: document.getElementById("description").value.trim() || null,
+            category: document.getElementById("category").value,
             difficulty: document.getElementById("difficulty").value,
             due_date: document.getElementById("due_date").value || null,
           };
@@ -155,6 +166,7 @@
               </div>
               ${task.description ? `<p class="task-description">${escapeHtml(task.description)}</p>` : ""}
               <dl class="task-meta">
+                <div><dt>Category</dt><dd>${escapeHtml(task.category)}</dd></div>
                 <div><dt>Difficulty</dt><dd>${task.difficulty}</dd></div>
                 <div><dt>Due</dt><dd>${task.due_date ? formatDateTime(task.due_date) : "No due date"}</dd></div>
                 <div><dt>Created by</dt><dd>${escapeHtml(task.created_by_username || "Unknown")}</dd></div>

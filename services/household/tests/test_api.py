@@ -30,6 +30,7 @@ def test_task_lifecycle_over_http(client, login):
     task = created.get_json()
     assert task["status"] == "pending" and task["assigned_to"] is None
     assert task["created_by_username"] == "alice"
+    assert task["category"] == "general"
     # 18:00 household local time (Europe/Paris, UTC+1 in December) is stored and returned as UTC.
     assert task["due_date"] == "2026-12-01T17:00:00Z"
 
@@ -42,6 +43,7 @@ def test_task_lifecycle_over_http(client, login):
 
     listed = client.get("/tasks", headers=alice).get_json()
     assert [t["id"] for t in listed] == [task["id"]]
+    assert listed[0]["category"] == "general"
 
 
 def test_patch_changes_only_the_fields_sent_and_null_clears(client, login):
@@ -57,6 +59,44 @@ def test_patch_changes_only_the_fields_sent_and_null_clears(client, login):
     ).get_json()
     assert cleared["description"] is None and cleared["due_date"] is None
     assert cleared["title"] == "Mop"
+
+
+def test_task_category_can_be_chosen_and_defaults_to_general(client, login):
+    alice = login("alice")
+
+    chosen = _new_task(client, alice, category="cooking")
+    omitted = _new_task(client, alice)
+    null = _new_task(client, alice, category=None)
+
+    assert chosen.status_code == 201 and chosen.get_json()["category"] == "cooking"
+    assert omitted.get_json()["category"] == "general"
+    assert null.get_json()["category"] == "general"
+
+
+def test_patch_changes_the_category_and_leaves_it_when_omitted(client, login):
+    alice = login("alice")
+    task_id = _new_task(client, alice, category="cleaning").get_json()["id"]
+
+    renamed = client.patch(f"/tasks/{task_id}", json={"title": "Scrub"}, headers=alice).get_json()
+    assert renamed["category"] == "cleaning"
+
+    moved = client.patch(f"/tasks/{task_id}", json={"category": "maintenance"}, headers=alice)
+    assert moved.status_code == 200 and moved.get_json()["category"] == "maintenance"
+    assert moved.get_json()["title"] == "Scrub"
+
+
+@pytest.mark.parametrize("category", ["gardening", "General", "", 3])
+def test_invalid_category_is_a_400_on_create_and_patch(client, login, category):
+    alice = login("alice")
+    task_id = _new_task(client, alice).get_json()["id"]
+
+    created = _new_task(client, alice, category=category)
+    patched = client.patch(f"/tasks/{task_id}", json={"category": category}, headers=alice)
+
+    assert created.status_code == 400
+    assert "Category must be" in created.get_json()["error"]
+    assert patched.status_code == 400
+    assert [t["category"] for t in client.get("/tasks", headers=alice).get_json()] == ["general"]
 
 
 def test_only_the_creator_can_edit_or_delete_a_task(client, login):

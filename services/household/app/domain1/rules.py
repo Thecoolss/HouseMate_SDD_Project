@@ -2,6 +2,9 @@ from datetime import datetime
 
 
 VALID_DIFFICULTIES = {"easy", "medium", "hard"}
+# Must match ck_task_category in migrations/*/002_add_task_category.sql.
+VALID_CATEGORIES = {"general", "cleaning", "cooking", "shopping", "maintenance"}
+DEFAULT_CATEGORY = "general"
 VALID_BOOKING_RESOURCES = {"laundry", "kitchen", "living_room"}
 
 
@@ -14,6 +17,14 @@ def validate_title(title):
 def validate_difficulty(difficulty):
     if difficulty not in VALID_DIFFICULTIES:
         raise ValueError("Difficulty must be easy, medium, or hard.")
+
+
+def validate_category(category):
+    if category not in VALID_CATEGORIES:
+        raise ValueError(
+            "Category must be general, cleaning, cooking, shopping, or maintenance."
+        )
+    return category
 
 
 def validate_booking(resource, start_time, end_time):

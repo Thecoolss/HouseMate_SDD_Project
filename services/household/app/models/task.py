@@ -5,6 +5,7 @@ from app.time_utils import utc_now
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
+    category = db.Column(db.String(40), nullable=False, default="general", server_default="general")
     description = db.Column(db.Text, nullable=True)
     difficulty = db.Column(db.String(20), nullable=False, default="medium")
     status = db.Column(db.String(20), nullable=False, default="pending")
@@ -22,5 +23,10 @@ class Task(db.Model):
         db.CheckConstraint(
             "status IN ('pending', 'done')",
             name="ck_task_status",
+        ),
+        # Added by migration 002; the allowed values match rules.VALID_CATEGORIES.
+        db.CheckConstraint(
+            "category IN ('general', 'cleaning', 'cooking', 'shopping', 'maintenance')",
+            name="ck_task_category",
         ),
     )

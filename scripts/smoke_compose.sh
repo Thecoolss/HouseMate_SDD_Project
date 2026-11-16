@@ -38,12 +38,19 @@ trap 'docker compose down -v >/dev/null 2>&1' EXIT
 docker compose down -v >/dev/null 2>&1 || true
 
 echo "== start the stack (project: $COMPOSE_PROJECT_NAME) =="
+# Upgrade populated 001 tables with the real SQL Server migration before the apps start.
+docker compose up -d --wait sqlserver || fail "SQL Server did not start"
+docker compose run --rm db-init || fail "database initialization failed"
+docker compose build household || fail "household build failed"
+docker compose run --rm --no-deps -T -e PYTHONPATH=/app \
+  -v "$PWD/scripts/check_task_category_migration.py:/tmp/check_task_category_migration.py:ro" \
+  household python /tmp/check_task_category_migration.py || fail "task category upgrade failed"
 docker compose up --build -d --wait || fail "stack did not become healthy"
 
 echo "== migrations =="
-check "household applied 001_init" 1 "$(docker compose logs household | grep -c 'migration applied: 001_init.sql')"
+# Household migrations were already applied by the upgrade check above.
 check "fairness applied 001_init" 1 "$(docker compose logs fairness | grep -c 'migration applied: 001_init.sql')"
-check "household schema_migrations rows" 1 "$(sql household 'SELECT COUNT(*) FROM schema_migrations')"
+check "household schema_migrations rows" 2 "$(sql household 'SELECT COUNT(*) FROM schema_migrations')"
 check "fairness schema_migrations rows" 1 "$(sql fairness 'SELECT COUNT(*) FROM schema_migrations')"
 
 echo "== health =="
@@ -64,7 +71,7 @@ check "fairness page names from household" smoke "$(curl -s $F/fairness -H "$AUT
 echo "== restart: data kept, nothing re-applied =="
 docker compose restart household fairness >/dev/null
 docker compose up -d --wait >/dev/null || fail "stack did not recover after restart"
-check "household schema_migrations rows" 1 "$(sql household 'SELECT COUNT(*) FROM schema_migrations')"
+check "household schema_migrations rows" 2 "$(sql household 'SELECT COUNT(*) FROM schema_migrations')"
 check "task survived the restart" 1 "$(sql household 'SELECT COUNT(*) FROM task')"
 check "snapshot survived the restart" 1 "$(sql fairness 'SELECT COUNT(*) FROM contribution_score')"
 

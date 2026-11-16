@@ -4,6 +4,7 @@ from app import db
 from app.api_utils import error_response, iso_utc, json_body, parse_datetime
 from app.domain1 import bp
 from app.domain1 import services
+from app.domain1.rules import DEFAULT_CATEGORY
 from app.models import User
 from app.tokens import require_auth
 
@@ -20,6 +21,7 @@ def _task_json(task, usernames):
     return {
         "id": task.id,
         "title": task.title,
+        "category": task.category,
         "description": task.description,
         "difficulty": task.difficulty,
         "status": task.status,
@@ -77,6 +79,8 @@ def create_task():
             description=body.get("description") or None,
             difficulty=body.get("difficulty"),
             due_date=parse_datetime(body.get("due_date"), "due date"),
+            # Omitted or null means the default category; anything else must be valid.
+            category=DEFAULT_CATEGORY if body.get("category") is None else body["category"],
         )
     except ValueError as error:
         return error_response(error)
@@ -88,7 +92,11 @@ def create_task():
 def update_task(task_id):
     """Fields left out of the body are unchanged; description or due_date set to null clear it."""
     body = json_body()
-    changes = {"title": body.get("title"), "difficulty": body.get("difficulty")}
+    changes = {
+        "title": body.get("title"),
+        "difficulty": body.get("difficulty"),
+        "category": body.get("category"),
+    }
     try:
         if "description" in body:
             changes["description"] = body["description"] or None

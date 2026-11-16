@@ -1,6 +1,8 @@
 """The migration runner: applies each file once, in order, and records it."""
 
 import pytest
+import runpy
+from pathlib import Path
 from sqlalchemy import create_engine, text
 
 from app import migrations
@@ -17,10 +19,34 @@ def _applied(engine):
         return [row[0] for row in rows]
 
 
+def test_real_task_category_upgrade_preserves_populated_rows(engine):
+    script = Path(__file__).resolve().parents[3] / "scripts/check_task_category_migration.py"
+    runpy.run_path(str(script))["verify_upgrade"](engine, migrations)
+
+
+def test_category_values_match_in_rules_model_and_both_migrations():
+    import re
+
+    from app.domain1.rules import VALID_CATEGORIES
+    from app.models import Task
+
+    def values(sql):
+        check = re.search(r"category IN \(([^)]*)\)", sql).group(1)
+        return set(re.findall(r"N?'([a-z_]+)'", check))
+
+    root = migrations.MIGRATIONS_ROOT
+    model_check = next(
+        str(c.sqltext) for c in Task.__table__.constraints if c.name == "ck_task_category"
+    )
+    assert values((root / "mssql" / "002_add_task_category.sql").read_text()) == VALID_CATEGORIES
+    assert values((root / "sqlite" / "002_add_task_category.sql").read_text()) == VALID_CATEGORIES
+    assert values(model_check) == VALID_CATEGORIES
+
+
 def test_first_run_applies_every_migration_and_records_it(engine):
     migrations.run_migrations(engine)
 
-    assert _applied(engine) == ["001_init.sql"]
+    assert _applied(engine) == ["001_init.sql", "002_add_task_category.sql"]
     with engine.connect() as connection:
         for table in ("user", "task", "booking"):
             connection.execute(text(f'SELECT * FROM "{table}"')).fetchall()
@@ -33,7 +59,7 @@ def test_second_run_applies_nothing(engine, capsys):
     migrations.run_migrations(engine)
 
     assert "migration applied" not in capsys.readouterr().out
-    assert _applied(engine) == ["001_init.sql"]
+    assert _applied(engine) == ["001_init.sql", "002_add_task_category.sql"]
 
 
 def test_a_new_migration_runs_once_and_keeps_existing_rows(engine, tmp_path, monkeypatch):

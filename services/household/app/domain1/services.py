@@ -2,7 +2,9 @@ from datetime import datetime
 
 from app import db
 from app.domain1.rules import (
+    DEFAULT_CATEGORY,
     validate_booking,
+    validate_category,
     validate_difficulty,
     validate_title,
 )
@@ -27,12 +29,14 @@ def get_task_for_edit(user, task_id):
     return task
 
 
-def create_task(user, title, description, difficulty, due_date=None):
+def create_task(user, title, description, difficulty, due_date=None, category=DEFAULT_CATEGORY):
     title = validate_title(title)
     validate_difficulty(difficulty)
+    category = validate_category(category)
 
     task = Task(
         title=title,
+        category=category,
         description=description,
         difficulty=difficulty,
         status="pending",
@@ -52,6 +56,7 @@ def update_task(
     description=_UNCHANGED,
     difficulty=None,
     due_date=_UNCHANGED,
+    category=None,
 ):
     task = get_task_for_edit(user, task_id)
 
@@ -60,6 +65,8 @@ def update_task(
     if difficulty is not None:
         validate_difficulty(difficulty)
         task.difficulty = difficulty
+    if category is not None:
+        task.category = validate_category(category)
 
     if description is not _UNCHANGED:
         task.description = description
