@@ -6,7 +6,7 @@
 # other service's openapi.yaml.
 student: sdroubi.ieu2024
 prefix: sdroubi-ieu2024
-# Reserved endpoint; populated by the first successful CD run.
+# Live Storage website endpoint, published by CD.
 public_url: https://sdroubiieu2024ui.z1.web.core.windows.net
 ui:
   path: ui

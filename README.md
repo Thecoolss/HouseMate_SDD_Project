@@ -76,8 +76,9 @@ ruff check .
 python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=70
 ```
 
-November 15 local results: household 110 tests, 98.95% coverage; fairness 62 tests,
-99.65% coverage. These include paused-database retry recovery, deadlines and rejection
+November 16 category-change verification recorded 128 household tests (about 99%
+coverage), 62 fairness tests and 10 HTTP integration tests; the merged commit passed
+both coverage gates in CI. These include paused-database retry recovery, deadlines and rejection
 of permanent connection failures. Test coverage is measured across the `app` package.
 
 From the repository root, in an environment containing both services' dependencies:
@@ -117,14 +118,14 @@ All HouseMate resources are in `rg-sdroubi-ieu2024`:
 | Resource | Name |
 |---|---|
 | Container Apps environment | `sdroubi-ieu2024-env` |
-| Container Apps (created on first CD) | `sdroubi-ieu2024-household`, `sdroubi-ieu2024-fairness` |
+| Container Apps | `sdroubi-ieu2024-household`, `sdroubi-ieu2024-fairness` |
 | Logical SQL server | `sdroubi-ieu2024-sql` |
 | SQL databases | `sdroubi-ieu2024-household-db`, `sdroubi-ieu2024-fairness-db` |
 | Storage account | `sdroubiieu2024ui` |
 | Pipeline identity | `sdroubi-ieu2024-deploy` |
 | Log Analytics workspace | `sdroubi-ieu2024-logs` |
 
-Reserved UI endpoint: <https://sdroubiieu2024ui.z1.web.core.windows.net>.
+Live UI: <https://sdroubiieu2024ui.z1.web.core.windows.net>.
 The application is published. Each successful CD records the service URLs and commit
 in the Actions run summary.
 
@@ -172,7 +173,9 @@ then runs `scripts/azure/deploy.sh`:
 
 Deployments are serialized and are not canceled midway by newer runs. PRs cannot use
 the Azure identity. A failed CI gate prevents both image publication and deployment.
-Until these changes are committed, pushed, reviewed and merged, CD cannot execute.
+The category migration is deployed from `b26560048aebc1d51ea824a9012945f697ac593b`.
+[Successful CI/CD run](https://github.com/Thecoolss/HouseMate_SDD_Project/actions/runs/43919500536)
+passed every job, including deployment.
 
 ## Cold starts, migrations and cost
 
@@ -183,7 +186,7 @@ The image tag and `/health` version still identify the exact deployed commit.
 See [Microsoft's Express deployment guidance](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/container-apps-workflows#deploy-to-container-apps-express-preview).
 
 Each Container App requests minimum zero and maximum one replica,
-one gunicorn worker, and a 210-second worker timeout. Startup probes allow three minutes;
+one gunicorn worker with four threads, and a 210-second worker timeout. Startup probes allow three minutes;
 readiness checks `/health`, while liveness checks the TCP listener so a database outage
 does not repeatedly restart the process.
 
@@ -208,12 +211,7 @@ in `schema_migrations`. Applied files must never be edited. Household migration
 existing rows are backfilled with `general`, and a `ck_task_category` CHECK constraint
 limits it to `general`, `cleaning`, `cooking`, `shopping` or `maintenance`. Tasks can be
 given a category when created or edited (API and UI); omitting it means `general`.
-Fairness remains on `001_init.sql`. To obtain Assignment 2 migration evidence:
-
-1. Merge/deploy the initial version and create real data through the hosted UI.
-2. Record data before the change.
-3. Merge and deploy the task-category migration only after saving the baseline.
-4. Save the Actions run, migration startup log and retained data afterward.
+Fairness remains on `001_init.sql`.
 
 Single-revision mode and max one replica bound steady-state resources; Azure revisions
 can briefly overlap during rollout. Forward schema changes must remain compatible with
@@ -226,17 +224,17 @@ change with a higher-numbered forward migration; reverting an image does not und
 
 ### Evidence for the task-category migration
 
-Before merging, open the live Tasks page, then browser developer tools → Network.
-Select the `GET /tasks` request and copy its **Response** JSON into a local
-`before-tasks.json` file. Preserve the task IDs, titles, statuses and assignees; a
-screenshot of the request list alone does not show those rows. Save the Tasks page
-screenshot too. Do not export authorization headers or tokens with the evidence.
+Migration `002` was deployed on November 16 in
+[run 43919500536](https://github.com/Thecoolss/HouseMate_SDD_Project/actions/runs/43919500536).
+Saved before/after `GET /tasks` responses contain the same five task IDs (1–5),
+with every original field unchanged and `category: general` added to each row.
+The November 16 Azure log inspection recorded `001_init.sql` at 12:52:47 UTC and
+`002_add_task_category.sql` at 17:36:22 UTC.
 
-After the PR passes CI and is merged, save the successful Actions run URL and the
-Household console log `migration applied: 002_add_task_category.sql`. Refresh Tasks
-and save `after-tasks.json` and a screenshot: the same IDs and existing values should
-remain, with `category: general` added. A subsequent startup should not reapply `002`.
-The migration has not been proven on Azure until these before/after records exist.
+The earlier [failed deployment](https://github.com/Thecoolss/HouseMate_SDD_Project/actions/runs/43763009580)
+failed Azure login because the federated credential did not match GitHub's OIDC
+subject containing owner/repository IDs. PR #10 corrected the trust configuration
+and Container Apps deployment settings; the subsequent main deployment succeeded.
 
 The household unit suite exercises the real SQLite 001 → 002 upgrade with populated
 rows. `scripts/smoke_compose.sh` runs the same preservation check on a disposable SQL
@@ -244,3 +242,9 @@ Server database before starting the services. It also checks that an insert omit
 category still receives the database default, that every allowed category is accepted
 and any other value is rejected by the constraint, and that a second migration run
 changes nothing. Neither check connects to Azure SQL.
+
+## Health and request logs
+
+Health checks prove each service's own database read/write access, not its dependency's
+availability. Request logs go to stdout (method, path, status, duration); Azure Log
+Analytics retains startup/request logs after the live log-stream buffer has moved on.
