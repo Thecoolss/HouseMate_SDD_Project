@@ -100,9 +100,9 @@ bash scripts/smoke_compose.sh
 It creates and removes a separate `housemate-smoke` Compose project and volume, checks
 migrations, restart persistence, the seam and partial failure. It never connects to Azure.
 
-CI also validates both `services/*/openapi.yaml` documents and `system.yaml`, and checks
-they match code. **`system.schema.json` is still a clearly marked local stand-in** until
-the professor supplies the official version. Deployment-render tests check secret
+CI validates `system.yaml` against the course-provided Assignment 2 `system.schema.json`
+and both `services/*/openapi.yaml` documents against the OpenAPI specification.
+Tests compare the documented configuration and endpoints with the code. Deployment-render tests check secret
 references, SHA image tags, ports, scaling and health probes without accessing Azure.
 
 ## Azure setup and continuous deployment
@@ -124,6 +124,9 @@ All HouseMate resources are in `rg-sdroubi-ieu2024`:
 | Storage account | `sdroubiieu2024ui` |
 | Pipeline identity | `sdroubi-ieu2024-deploy` |
 | Log Analytics workspace | `sdroubi-ieu2024-logs` |
+
+Keep the Log Analytics workspace attached to the Container Apps environment. Assignment 2
+includes it in the resource allowance and specifies a free allowance of 5 GB of logs per month.
 
 Live UI: <https://sdroubiieu2024ui.z1.web.core.windows.net>.
 The application is published. Each successful CD records the service URLs and commit
