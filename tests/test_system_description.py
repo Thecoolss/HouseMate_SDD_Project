@@ -101,12 +101,6 @@ def test_the_seam_in_the_code_calls_only_documented_endpoints():
     assert called == documented
 
 
-def test_every_service_is_scaled_to_zero_with_one_replica_at_most():
-    for service in SYSTEM["services"].values():
-        assert service["azure"]["min_replicas"] == 0
-        assert service["azure"]["max_replicas"] == 1
-
-
 def test_azure_resources_carry_the_students_prefix():
     prefix = SYSTEM["prefix"]
     azure = SYSTEM["azure"]

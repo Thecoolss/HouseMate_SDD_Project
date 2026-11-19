@@ -14,11 +14,9 @@ ui:
   storage_account: sdroubiieu2024ui
   calls: [household, fairness]
 azure:
-  region: germanywestcentral
   resource_group: rg-sdroubi-ieu2024
   container_apps_environment: sdroubi-ieu2024-env
   sql_server: sdroubi-ieu2024-sql
-  managed_identity: sdroubi-ieu2024-deploy
   registry: ghcr.io/thecoolss
 services:
   household:
@@ -42,8 +40,6 @@ services:
     azure:
       container_app: sdroubi-ieu2024-household
       sql_database: sdroubi-ieu2024-household-db
-      min_replicas: 0
-      max_replicas: 1
   fairness:
     description: Contribution scoring and its historical snapshots.
     path: services/fairness
@@ -71,5 +67,3 @@ services:
     azure:
       container_app: sdroubi-ieu2024-fairness
       sql_database: sdroubi-ieu2024-fairness-db
-      min_replicas: 0
-      max_replicas: 1
