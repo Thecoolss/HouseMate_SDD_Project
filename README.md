@@ -10,6 +10,13 @@ plain HTML/JavaScript UI. No new feature domain was added.
 - Completing tasks earns easy/medium/hard weights of 1/2/3. Each booking adds 1.
   Contribution percentages divide each member's total by the household total. Overdue
   tasks are reported separately and do not reduce the percentage.
+- Recalculation uses the last 30 days. Completed tasks reject edits, preserving their
+  recorded difficulty for subsequent calculations.
+
+Housemates need to coordinate shared work and resource use, and review contributions
+without losing records during an upgrade. The household organizer also needs useful
+information during outages. Data-preserving migrations protect existing tasks, and
+Fairness displays saved snapshots when Household is unavailable.
 
 ```mermaid
 flowchart LR

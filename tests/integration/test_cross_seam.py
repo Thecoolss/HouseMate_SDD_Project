@@ -38,11 +38,23 @@ def _tables(db_path):
 def test_recalculation_across_the_seam_gives_the_assignment_1_worked_example(stack):
     alice, _ = stack.register("alice")
     bob, bob_id = stack.register("bob")
-    stack.register("charlie")
+    charlie, charlie_id = stack.register("charlie")
     _complete_task(stack, alice, "easy")
     _complete_task(stack, alice, "hard")
     _complete_task(stack, bob, "medium")
     _book(stack, bob, hours_ago=2)
+    overdue = httpx.post(
+        f"{stack.household.url}/tasks",
+        json={
+            "title": "Overdue chore", "difficulty": "hard",
+            "due_date": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(),
+        },
+        headers=charlie,
+    )
+    overdue.raise_for_status()
+    httpx.post(
+        f"{stack.household.url}/tasks/{overdue.json()['id']}/claim", headers=charlie,
+    ).raise_for_status()
 
     response = httpx.post(f"{stack.fairness.url}/fairness/recalculate", headers=alice)
 
@@ -53,7 +65,19 @@ def test_recalculation_across_the_seam_gives_the_assignment_1_worked_example(sta
     assert scores[1]["contribution_score"] == pytest.approx(4 / 7 * 100)
     assert scores[bob_id]["weighted_score"] == 2 and scores[bob_id]["bookings_count"] == 1
     assert scores[bob_id]["contribution_score"] == pytest.approx(3 / 7 * 100)
-    assert scores[3]["contribution_score"] == 0
+    assert scores[charlie_id]["contribution_score"] == 0
+    assert scores[charlie_id]["overdue_tasks"] == 1
+    assert scores[bob_id]["overdue_tasks"] == 0
+    with sqlite3.connect(stack.fairness_db) as connection:
+        saved = connection.execute(
+            "SELECT overdue_tasks, contribution_score FROM contribution_score WHERE user_id = ?",
+            (charlie_id,),
+        ).fetchone()
+    assert saved == (1, 0)
+    page = httpx.get(f"{stack.fairness.url}/fairness", headers=charlie)
+    page.raise_for_status()
+    snapshots = {row["user_id"]: row["snapshot"] for row in page.json()["rows"]}
+    assert snapshots[charlie_id]["overdue_tasks"] == 1
 
 
 def test_the_fairness_page_shows_member_names_fetched_from_household(stack):

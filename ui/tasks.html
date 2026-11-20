@@ -180,7 +180,9 @@
           if (canClaim) actions.append(button("Claim", "button-secondary", () => act(`/tasks/${task.id}/claim`)));
           if (canComplete) actions.append(button("Complete", "button-secondary", () => act(`/tasks/${task.id}/complete`)));
           if (mine) {
-            actions.append(button("Edit", "button-quiet", () => showForm(task)));
+            if (task.status === "pending") {
+              actions.append(button("Edit", "button-quiet", () => showForm(task)));
+            }
             actions.append(button("Delete", "button-danger", () => removeTask(task.id)));
           }
           return article;

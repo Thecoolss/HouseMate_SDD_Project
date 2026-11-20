@@ -10,6 +10,24 @@ from app.models import ContributionScore
 from app.time_utils import utc_now
 
 
+def latest_snapshots():
+    """The most recent ContributionScore per user, keyed by user_id."""
+    ranked = db.select(
+        ContributionScore.id.label("snapshot_id"),
+        db.func.row_number()
+        .over(
+            partition_by=ContributionScore.user_id,
+            order_by=(ContributionScore.calculated_at.desc(), ContributionScore.id.desc()),
+        )
+        .label("snapshot_rank"),
+    ).subquery()
+    statement = db.select(ContributionScore).join(
+        ranked,
+        db.and_(ranked.c.snapshot_id == ContributionScore.id, ranked.c.snapshot_rank == 1),
+    )
+    return {score.user_id: score for score in db.session.execute(statement).scalars()}
+
+
 def calculate_fairness(period_start, period_end, calculated_at=None, *, token):
     """Append one ContributionScore per household member for the period.
 

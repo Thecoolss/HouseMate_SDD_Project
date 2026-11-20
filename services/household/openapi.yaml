@@ -99,8 +99,10 @@ paths:
       - { $ref: "#/components/parameters/TaskId" }
     patch:
       tags: [tasks]
-      summary: Edit a task (creator only)
-      description: Fields left out of the body are unchanged. description and due_date set to null are cleared.
+      summary: Edit a pending task (creator only)
+      description: >-
+        Completed tasks reject edits with status 400 and remain unchanged.
+        Fields left out of the body are unchanged. description and due_date set to null are cleared.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true

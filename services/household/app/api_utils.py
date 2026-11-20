@@ -4,9 +4,8 @@ from datetime import datetime
 
 from flask import abort, jsonify, request
 
+from app.errors import ResourceNotFound
 from app.time_utils import local_to_utc_naive
-
-_NOT_FOUND_MESSAGES = {"Task not found.", "Booking not found."}
 
 
 def json_body():
@@ -39,6 +38,6 @@ def error_response(error):
     """Map service-layer exceptions to HTTP responses."""
     if isinstance(error, PermissionError):
         return jsonify(error=str(error)), 403
-    if str(error) in _NOT_FOUND_MESSAGES:
+    if isinstance(error, ResourceNotFound):
         return jsonify(error=str(error)), 404
     return jsonify(error=str(error)), 400
