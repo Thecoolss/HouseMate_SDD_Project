@@ -2,10 +2,8 @@ from datetime import timedelta
 
 from flask import g, jsonify
 
-from app import db
 from app.domain2 import bp
-from app.domain2.services import calculate_fairness
-from app.models import ContributionScore
+from app.domain2.services import calculate_fairness, latest_snapshots
 from app.seam import HouseholdUnavailable, get_members
 from app.time_utils import utc_now
 from app.tokens import require_auth
@@ -28,24 +26,6 @@ def _score_json(score):
     }
 
 
-def _latest_snapshots():
-    """The most recent ContributionScore per user, keyed by user_id."""
-    ranked = db.select(
-        ContributionScore.id.label("snapshot_id"),
-        db.func.row_number()
-        .over(
-            partition_by=ContributionScore.user_id,
-            order_by=(ContributionScore.calculated_at.desc(), ContributionScore.id.desc()),
-        )
-        .label("snapshot_rank"),
-    ).subquery()
-    statement = db.select(ContributionScore).join(
-        ranked,
-        db.and_(ranked.c.snapshot_id == ContributionScore.id, ranked.c.snapshot_rank == 1),
-    )
-    return {score.user_id: score for score in db.session.execute(statement).scalars()}
-
-
 @bp.get("/fairness")
 @require_auth
 def fairness():
@@ -54,7 +34,7 @@ def fairness():
     If household is down this still answers 200 from fairness's own data: members without
     a snapshot are missing, usernames are null, and household_available is false.
     """
-    snapshots = _latest_snapshots()
+    snapshots = latest_snapshots()
     try:
         members = get_members(g.token)
         household_available = True

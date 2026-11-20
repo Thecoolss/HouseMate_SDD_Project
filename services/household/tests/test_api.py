@@ -46,6 +46,26 @@ def test_task_lifecycle_over_http(client, login):
     assert listed[0]["category"] == "general"
 
 
+@pytest.mark.parametrize("changes", [
+    {"difficulty": "hard"},
+    {"title": "Changed", "description": "Changed", "category": "shopping", "due_date": None},
+    {},
+])
+def test_completed_task_rejects_edits_without_changing_data(client, login, changes):
+    alice, bob = login("alice"), login("bob")
+    task = _new_task(client, alice, description="Kitchen", due_date="2026-12-01T18:00").get_json()
+    path = f"/tasks/{task['id']}"
+    assert client.post(f"{path}/claim", headers=alice).status_code == 200
+    completed = client.post(f"{path}/complete", headers=alice).get_json()
+
+    response = client.patch(path, json=changes, headers=alice)
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "Completed tasks cannot be edited."
+    assert client.patch(path, json=changes, headers=bob).status_code == 403
+    assert client.get("/tasks", headers=alice).get_json() == [completed]
+
+
 def test_patch_changes_only_the_fields_sent_and_null_clears(client, login):
     alice = login("alice")
     task = _new_task(client, alice, description="keep", due_date="2026-12-01T18:00").get_json()
@@ -388,3 +408,12 @@ def test_expired_token_is_rejected(app, client, login):
 @pytest.mark.parametrize("header", ["Token abc", "Bearer", "", "basic Zm9v"])
 def test_malformed_authorization_header_is_rejected(client, header):
     assert client.get("/tasks", headers={"Authorization": header}).status_code == 401
+
+
+def test_not_found_status_depends_on_exception_type(app):
+    from app.api_utils import error_response
+    from app.errors import ResourceNotFound
+
+    with app.app_context():
+        assert error_response(ResourceNotFound("Record unavailable."))[1] == 404
+        assert error_response(ValueError("Task not found."))[1] == 400

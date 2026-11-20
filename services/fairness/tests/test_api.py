@@ -249,7 +249,7 @@ def test_unexpected_error_is_a_json_500_without_a_stack_trace(app, client, auth,
     def explode():
         raise RuntimeError("secret internal detail")
 
-    monkeypatch.setattr("app.domain2.routes._latest_snapshots", explode)
+    monkeypatch.setattr("app.domain2.routes.latest_snapshots", explode)
 
     response = client.get("/fairness", headers=auth)
 

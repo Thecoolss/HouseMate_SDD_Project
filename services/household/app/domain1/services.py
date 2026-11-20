@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app import db
+from app.errors import ResourceNotFound
 from app.domain1.rules import (
     DEFAULT_CATEGORY,
     validate_booking,
@@ -18,7 +19,7 @@ _UNCHANGED = object()
 def _get_task(task_id):
     task = db.session.get(Task, task_id)
     if task is None:
-        raise ValueError("Task not found.")
+        raise ResourceNotFound("Task not found.")
     return task
 
 
@@ -59,6 +60,8 @@ def update_task(
     category=None,
 ):
     task = get_task_for_edit(user, task_id)
+    if task.status != "pending":
+        raise ValueError("Completed tasks cannot be edited.")
 
     if title is not None:
         task.title = validate_title(title)
@@ -161,7 +164,7 @@ def get_overdue_task_counts(calculated_at):
 def _get_booking(booking_id):
     booking = db.session.get(Booking, booking_id)
     if booking is None:
-        raise ValueError("Booking not found.")
+        raise ResourceNotFound("Booking not found.")
     return booking
 
 
