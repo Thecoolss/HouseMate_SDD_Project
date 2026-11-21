@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time SQL logins/users only. Leaves application schema creation to first CD startup.
+# One-time contained SQL users only. Leaves application schema creation to first CD startup.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 source scripts/azure/config.sh

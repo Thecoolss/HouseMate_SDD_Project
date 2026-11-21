@@ -11,8 +11,9 @@ SQL_SERVER=${PREFIX}-sql
 SQL_ADMIN=housemate_admin
 ACA_ENV=${PREFIX}-env
 LOG_WORKSPACE=${PREFIX}-logs
-DEPLOY_IDENTITY=${PREFIX}-deploy
+DEPLOY_IDENTITY=${PREFIX}-github
 GITHUB_REPO=Thecoolss/HouseMate_SDD_Project
 # GitHub's immutable OIDC subject includes the owner and repository IDs.
 # Must exactly match the subject claim printed by azure/login for main.
-GITHUB_OIDC_SUBJECT=repo:Thecoolss@148555406/HouseMate_SDD_Project@1380508437:ref:refs/heads/main
+GITHUB_OIDC_IMMUTABLE_SUBJECT=repo:Thecoolss@148555406/HouseMate_SDD_Project@1380508437:ref:refs/heads/main
+GITHUB_OIDC_SUBJECT="repo:${GITHUB_REPO}:ref:refs/heads/main"
