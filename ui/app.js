@@ -83,6 +83,9 @@ async function apiFetch(baseUrl, path, options = {}) {
   }
 
   if (!response.ok) {
+    if (response.status === 503 && !data?.error) {
+      throw new ApiError(503, "The service may still be starting up. Please try again shortly.");
+    }
     const message = (data && data.error) || `Request failed (${response.status}).`;
     throw new ApiError(response.status, message);
   }

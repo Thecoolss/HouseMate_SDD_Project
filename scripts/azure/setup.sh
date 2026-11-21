@@ -26,7 +26,7 @@ set +a
 
 for provider in Microsoft.App Microsoft.OperationalInsights Microsoft.Sql Microsoft.Storage Microsoft.ManagedIdentity; do
   az provider register --namespace "$provider" --wait
- done
+done
 az group create -n "$RESOURCE_GROUP" -l "$LOCATION" --tags project=HouseMate -o none
 az monitor log-analytics workspace create -g "$RESOURCE_GROUP" -n "$LOG_WORKSPACE" \
   -l "$LOCATION" --retention-time 30 --sku PerGB2018 -o none
@@ -54,24 +54,40 @@ if ! az sql server show -g "$RESOURCE_GROUP" -n "$SQL_SERVER" -o none 2>/dev/nul
 fi
 az sql server firewall-rule create -g "$RESOURCE_GROUP" -s "$SQL_SERVER" \
   -n AllowAzureServices --start-ip-address 0.0.0.0 --end-ip-address 0.0.0.0 -o none
+# Free offer is a creation-time property. Inspect both existing databases before provisioning.
+databases=$(az sql db list -g "$RESOURCE_GROUP" -s "$SQL_SERVER" -o json)
+databases_to_create=()
 for service in household fairness; do
-  az sql db create -g "$RESOURCE_GROUP" -s "$SQL_SERVER" -n "$PREFIX-$service-db" \
+  name="$PREFIX-$service-db"
+  offer=$(python3 -c '
+import json
+import sys
+
+database = next((db for db in json.load(sys.stdin) if db["name"] == sys.argv[1]), None)
+if database is None:
+    print("missing")
+elif database.get("useFreeLimit") is True and database.get("freeLimitExhaustionBehavior") == "AutoPause":
+    print("ready")
+else:
+    print("incompatible")
+' "$name" <<< "$databases")
+  if [[ $offer == incompatible ]]; then
+    echo "$name exists outside the required free offer with AutoPause. See the README for cutover steps." >&2
+    exit 1
+  fi
+  if [[ $offer == missing ]]; then
+    databases_to_create+=("$name")
+  fi
+done
+for name in "${databases_to_create[@]}"; do
+  az sql db create -g "$RESOURCE_GROUP" -s "$SQL_SERVER" -n "$name" \
     --edition GeneralPurpose --family Gen5 --capacity 1 --compute-model Serverless \
-    --min-capacity 0.5 --auto-pause-delay 15 --max-size 2GB \
+    --min-capacity 0.5 --use-free-limit true --free-limit-exhaustion-behavior AutoPause \
     --backup-storage-redundancy Local --zone-redundant false -o none
- done
+done
 
-az identity create -g "$RESOURCE_GROUP" -n "$DEPLOY_IDENTITY" -l "$LOCATION" -o none
-principal_id=$(az identity show -g "$RESOURCE_GROUP" -n "$DEPLOY_IDENTITY" --query principalId -o tsv)
-scope="/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP"
-az role assignment create --assignee-object-id "$principal_id" --assignee-principal-type ServicePrincipal \
-  --role Contributor --scope "$scope" -o none
-az role assignment create --assignee-object-id "$principal_id" --assignee-principal-type ServicePrincipal \
-  --role 'Storage Blob Data Contributor' --scope "$scope/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT" -o none
-az identity federated-credential create -g "$RESOURCE_GROUP" --identity-name "$DEPLOY_IDENTITY" \
-  -n github-main --issuer https://token.actions.githubusercontent.com \
-  --subject "$GITHUB_OIDC_SUBJECT" --audiences api://AzureADTokenExchange -o none
-
+bash scripts/azure/setup-identity.sh
+bash scripts/azure/grant-grading-access.sh
 bash scripts/azure/configure-github.sh
 
 printf 'Foundation ready. Initialise service logins with bash scripts/azure/init-databases.sh\n'

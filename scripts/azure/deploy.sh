@@ -2,18 +2,22 @@
 # Run only by the CD job after all checks and SHA-tagged image publication succeed.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-source scripts/azure/config.sh
 [[ ${GITHUB_REF:-} == refs/heads/main && ${GITHUB_EVENT_NAME:-} == push ]] || {
   echo 'Deployment is only allowed on a push to main.' >&2; exit 1;
 }
 : "${HOUSEHOLD_DATABASE_URL:?missing GitHub secret}"
 : "${FAIRNESS_DATABASE_URL:?missing GitHub secret}"
 : "${AUTH_SECRET:?missing GitHub secret}"
-export PREFIX LOCATION
+: "${PREFIX:?missing GitHub variable}"
+: "${RESOURCE_GROUP:?missing GitHub variable}"
+: "${UI_STORAGE:?missing GitHub variable}"
+export PREFIX
 export AZURE_CORE_ONLY_SHOW_ERRORS=true
-az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-ENVIRONMENT_ID=$(az containerapp env show -g "$RESOURCE_GROUP" -n "$ACA_ENV" --query id -o tsv)
-UI_ORIGIN=$(az storage account show -g "$RESOURCE_GROUP" -n "$STORAGE_ACCOUNT" --query primaryEndpoints.web -o tsv)
+# azure/login has already selected the subscription from the workflow secret.
+LOCATION=$(az containerapp env show -g "$RESOURCE_GROUP" -n "$PREFIX-env" --query location -o tsv)
+export LOCATION
+ENVIRONMENT_ID=$(az containerapp env show -g "$RESOURCE_GROUP" -n "$PREFIX-env" --query id -o tsv)
+UI_ORIGIN=$(az storage account show -g "$RESOURCE_GROUP" -n "$UI_STORAGE" --query primaryEndpoints.web -o tsv)
 UI_ORIGIN=${UI_ORIGIN%/}
 export ENVIRONMENT_ID UI_ORIGIN
 umask 077
@@ -43,10 +47,13 @@ config['REQUEST_TIMEOUT_MS'] = 230000
 with open(sys.argv[1], 'w') as stream:
     stream.write('window.HOUSEMATE_CONFIG = ' + json.dumps(config) + ';\n')
 PY
-az storage blob upload-batch --account-name "$STORAGE_ACCOUNT" --auth-mode login \
+az storage blob upload-batch --account-name "$UI_STORAGE" --auth-mode login \
   --destination '$web' --source "$work/ui" --overwrite true --content-cache-control no-cache -o none
 curl --fail --silent --show-error --max-time 30 "$UI_ORIGIN/config.js" > "$work/config.js"
 cmp "$work/ui/config.js" "$work/config.js"
+# Verify the published UI still points at healthy services on this commit.
+python3 scripts/azure/check_health.py "$HOUSEHOLD_URL" "$GITHUB_SHA"
+python3 scripts/azure/check_health.py "$FAIRNESS_URL" "$GITHUB_SHA"
 {
   echo '### HouseMate deployment'
   echo "Commit: \`$GITHUB_SHA\`"

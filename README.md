@@ -114,11 +114,9 @@ references, SHA image tags, ports, scaling and health probes without accessing A
 
 ## Azure setup and continuous deployment
 
-The November course update uses a **personal Azure for Students subscription**, a
-managed identity for GitHub OIDC, and **Storage static website hosting**, replacing the
-original brief's shared subscription and Static Web Apps. This subscription forbids
-France Central; HouseMate uses **Germany West Central**. Existing pantry/catalog
-resources in another resource group are unrelated and must not be modified.
+HouseMate uses a personal **Azure for Students** subscription, GitHub OIDC with a
+managed identity, and **Azure Storage static website hosting**. HouseMate uses
+**Germany West Central**, an allowed region for this subscription.
 
 All HouseMate resources are in `rg-sdroubi-ieu2024`:
 
@@ -129,7 +127,7 @@ All HouseMate resources are in `rg-sdroubi-ieu2024`:
 | Logical SQL server | `sdroubi-ieu2024-sql` |
 | SQL databases | `sdroubi-ieu2024-household-db`, `sdroubi-ieu2024-fairness-db` |
 | Storage account | `sdroubiieu2024ui` |
-| Pipeline identity | `sdroubi-ieu2024-deploy` |
+| Pipeline identity in the revised setup | `sdroubi-ieu2024-github` |
 | Log Analytics workspace | `sdroubi-ieu2024-logs` |
 
 Keep the Log Analytics workspace attached to the Container Apps environment. Assignment 2
@@ -139,47 +137,91 @@ Live UI: <https://sdroubiieu2024ui.z1.web.core.windows.net>.
 The application is published. Each successful CD records the service URLs and commit
 in the Actions run summary.
 
-One-time setup (Azure CLI and GitHub CLI must be logged in, with permission to create
-resources/role assignments in this subscription and manage this repository's secrets):
+### Initial setup
+
+Sign in to Azure CLI and GitHub CLI with accounts that can provision the HouseMate
+resources, assign their roles, and configure this repository's Actions credentials.
+Review the resource names in `scripts/azure/config.sh` before running setup.
 
 ```bash
-# Inspect scripts/azure/config.sh first: it fixes subscription, group and resource names.
+az account set --subscription <personal-azure-for-students-subscription>
+az policy assignment list --query "[?displayName=='Allowed resource deployment regions'].parameters" -o json
 bash scripts/azure/setup.sh
-# Python environment needs pymssql from either service's requirements.
+# Use a Python environment with pymssql installed.
 PYTHON=venv/bin/python bash scripts/azure/init-databases.sh
 ```
 
-`setup.sh` creates the supporting resources, the managed identity, its role assignments
-and an OIDC federation for
-`repo:Thecoolss@148555406/HouseMate_SDD_Project@1380508437:ref:refs/heads/main`.
-This immutable subject includes GitHub's owner and repository IDs and is configured as
-`GITHUB_OIDC_SUBJECT` in `scripts/azure/config.sh`. Azure requires an exact match with
-the subject claim printed by `azure/login`; omitting the IDs causes `AADSTS700213`.
-It sets GitHub variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
-The identity has Contributor only in HouseMate's resource group and Storage Blob Data
-Contributor on HouseMate's storage account. It cannot assign roles.
+The setup scripts implement the initial Azure and GitHub configuration in this order.
 
-Credentials are generated once in `.azure-local/secrets.env` (gitignored, mode 600).
-Keep that file private and backed up securely; do not regenerate it for an existing SQL
-server. Rerunning setup reuses it. The SQL admin credential is not given to CD.
-`init-databases.sh` temporarily allows the caller's public IP, creates each SQL login and
-its database user, verifies cross-database access is denied, removes the temporary rule,
-and sets GitHub secrets `HOUSEHOLD_DATABASE_URL`, `FAIRNESS_DATABASE_URL`, `AUTH_SECRET`.
-It does **not** create application tables or apply migrations. Each login has `db_owner`
-only in its own database so it can run startup migrations. Azure-services firewall
-access remains enabled for Container Apps.
+1. `setup.sh` registers the five Azure providers, creates the resource group and
+   connects the Log Analytics workspace to the Container Apps environment.
+2. It creates a StorageV2 account with Standard_LRS and enables static website hosting.
+3. It sets up the logical SQL server with the Azure-services firewall rule and creates
+   two General Purpose serverless Gen5 databases on the free offer.
+4. `setup-identity.sh` creates the user-assigned identity `sdroubi-ieu2024-github`.
+   It grants Contributor at the HouseMate resource group and Storage Blob Data
+   Contributor on the UI storage account. The identity trusts both the plain
+   repository subject and the GitHub owner/repository-ID subject for this repository's
+   `main` branch. Azure matches the subject exactly.
+5. `grant-grading-access.sh` gives both professors Reader access to the HouseMate
+   resource group. You can run it separately on an existing deployment.
+6. `configure-github.sh` sends `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and
+   `AZURE_SUBSCRIPTION_ID` to Actions secrets. It sets `PREFIX`, `RESOURCE_GROUP`,
+   and `UI_STORAGE` as Actions variables.
+7. `init-databases.sh` opens a temporary firewall rule for the current IP, creates a
+   password-authenticated contained user in each service's database, and closes the
+   firewall rule. It verifies the three required roles (`db_ddladmin`,
+   `db_datareader`, `db_datawriter`) and denies cross-database access. After both
+   checks pass it sets the `HOUSEHOLD_DATABASE_URL`, `FAIRNESS_DATABASE_URL`, and
+   `AUTH_SECRET` Actions secrets. The service applies its own schema on startup.
 
-Every push/PR runs lint, per-service tests/coverage, schema checks, HTTP integration,
-SQL Server Compose smoke tests and both image builds. Only a push to `main` publishes
-images, tagged with the full commit SHA. The dependent CD job authenticates with OIDC,
-then runs `scripts/azure/deploy.sh`:
+Setup generates local credentials in the ignored `.azure-local/secrets.env` file with
+owner-only permissions. Reuse that file for existing resources and keep a secure
+backup. CD uses the application database connection strings and the shared signing
+secret. The SQL administrator password stays local.
+
+### Existing deployment cutover
+
+On November 21, HouseMate moved from regular serverless SQL to the free offer.
+Azure applies the offer when a database is created. The cutover used two temporary
+free-offer databases on the same logical server. [Azure SQL free-tier FAQ](https://learn.microsoft.com/en-us/azure/azure-sql/database/free-tier-faq)
+
+1. Export the original data and migration ledgers privately. Import into fresh
+   free-offer databases and compare the rows, migration timestamps, and identity
+   counters against the originals.
+2. Prepare the `<prefix>-github` identity and verify the contained users' scoped
+   access and ability to run migrations. Keep the original server logins mapped as
+   temporary read/write users on the copies until the revised workflow deploys.
+3. Briefly stop both Container Apps and compare the source and target again.
+   Rename the original pair to `-db-legacy` and give the verified free-offer
+   pair the canonical `-db` names. Restart both apps and prepare the new runtime
+   secrets. The two canonical databases use the free offer with 32 GB and
+   60-minute idle auto-pause.
+4. After the revised `main` deployment passes both health checks and the browser
+   walkthrough, retire the `-db-legacy` pair, the temporary compatibility users,
+   and the superseded `sdroubi-ieu2024-deploy` identity. Retain the historical
+   migration run, startup log, and before/after evidence. Update the report's
+   deployment diagram and submission SHA after verifying the new deployment.
+
+### Continuous deployment
+
+The `CI` workflow runs directly for pull requests and pushes outside `main`. It
+runs lint, per-service tests and coverage, schema validation, HTTP integration,
+and SQL Server Compose smoke tests before building both images with
+`provenance: false`. A push to `main` triggers `CD`, which calls the same CI
+workflow on that commit and publishes its SHA-tagged images. The dependent
+deployment job signs in with OIDC and runs `scripts/azure/deploy.sh`.
+On a fresh repository, make both GHCR packages public after the first publish so
+Container Apps can pull the images. Rerun the failed deployment after changing the
+package visibility.
 
 1. Create/update each Container App with that SHA's image, secret references, HTTPS
    ingress, the exact UI CORS origin, and the configured service URL.
 2. Wait up to five minutes per service for `/health` to report `200`, healthy database
    access and that **same SHA**, not a previous revision.
 3. Stage the UI, generate `config.js` with the two HTTPS URLs and a 230-second request
-   timeout, upload to `$web` using identity-based authorization, and verify config.js.
+   timeout, upload to `$web` using identity-based authorization, then verify config.js
+   and recheck both live health endpoints.
 
 Deployments are serialized and are not canceled midway by newer runs. PRs cannot use
 the Azure identity. A failed CI gate prevents both image publication and deployment.
@@ -206,21 +248,24 @@ budget plus at most one 5-second login attempt. Invalid credentials/database per
 fail immediately. SQL statements and migrations themselves are never blindly replayed.
 SQL Server uses `NullPool` to avoid leaving idle pooled sessions open. Fairness's cloud
 HTTP timeout is 90 seconds; local defaults remain short. The browser allows 230 seconds
-for a cloud request and displays an unavailable message when the request fails.
+for a cloud request. An Azure startup `503` without an application error prompts the
+user to try again shortly. A JSON error from Fairness keeps its own explanation.
 
-Databases are General Purpose serverless Gen5, minimum 0.5/maximum 1 vCore, 2 GB maximum,
-15-minute idle auto-pause and locally redundant backups. They consume student credits
-while awake; this setup uses regular serverless SQL, not the optional free-limit offer.
-SQL storage/backups and Storage/Log Analytics usage can still cost credit while compute
-is idle. There is no always-on compute plan or paid container registry. Avoid periodic
-external health polling, which would wake the system and prevent idle savings.
+The revised configuration requests General Purpose serverless Gen5, 0.5–1 vCore,
+locally redundant backups, and the Azure SQL free offer with `AutoPause` on quota
+exhaustion. The course guide describes 60-minute idle auto-pause and 32 GB for the
+offer. The setup leaves delay and size to Azure. The idle timeout and the automatic
+pause after exhausting the monthly allowance are separate settings. Storage and
+Log Analytics have their own usage meters. Periodic external health polling wakes
+the services and can prevent idle savings.
 
 Each service runs its numbered dialect-specific migrations at startup and records them
 in `schema_migrations`. Applied files must never be edited. Household migration
 `002_add_task_category.sql` adds a non-null `category` to the populated `task` table:
 existing rows are backfilled with `general`, and a `ck_task_category` CHECK constraint
 limits it to `general`, `cleaning`, `cooking`, `shopping` or `maintenance`. Tasks can be
-given a category when created or edited (API and UI); omitting it means `general`.
+given a category on creation or while pending. Omitting it on creation uses `general`.
+A partial edit that omits the category preserves its existing value.
 Fairness remains on `001_init.sql`.
 
 Single-revision mode and max one replica bound steady-state resources; Azure revisions

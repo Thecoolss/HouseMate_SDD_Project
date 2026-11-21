@@ -62,6 +62,11 @@ Decision: Use Azure CLI scripts to provision rg-sdroubi-ieu2024 with a Consumpti
 Alternatives considered: Bicep was deferred in favour of understandable CLI scripts; and always-on compute would conflict with the assignment's serverless requirement.
 Consequences: Containers and SQL can sleep, so startup migrations must tolerate database resume through bounded connection retries, suitable worker/probe/request timeouts and closed idle connections; storage, backups and logs may still consume credit. At 100x traffic, the one-worker, one-replica services and the 1-vCore databases become the limits, so we would tune the existing four threads per worker, add replicas and move migrations into a deploy step (or a SQL application lock), since several replicas could otherwise run them at once. We would also raise the SQL capacity and add indexes on contribution_score(user_id, calculated_at) and booking(resource, start_time), store usernames with snapshots so GET /fairness stops calling household on every view, and reconsider provisioned SQL, because scale-to-zero saves nothing under constant load.
 
+Revision (2026-11-21): The updated guide requires the SQL free offer with `AutoPause`
+on quota exhaustion and the `<prefix>-github` identity. The revised setup requests both.
+Azure applies the offer only to new databases. The cutover copied the data and
+migration ledgers into a verified free-offer pair before switching the names.
+
 ## 9. Pipeline and testing
 Date: 2026-11-13
 Status: Decided
@@ -69,6 +74,11 @@ Context: Every push and PR must validate both services before main can publish a
 Decision: Keep one workflow whose lint, per-service 70% coverage gates, system/OpenAPI validation, HTTP integration and SQL Server Compose smoke checks must pass before image builds, with SHA-tagged publication and dependent Azure deployment only on pushes to main. Test the seam using real service processes with separate SQLite databases, and verify SQL Server migrations, restart persistence and partial failure with the Compose smoke test; CD checks the expected health SHA before publishing the UI.
 Alternatives considered: A separate CD workflow would need explicit coordination to select the successful CI commit; a stub-only seam test could agree with an outdated contract, while full browser tests add maintenance beyond the current service-focused checks.
 Consequences: Failed checks block publication and deployment, and serialized deployment jobs do not cancel an active deployment mid-run. Browser interactions and actual Azure cold-start timing are not covered by automated CI, which never connects to Azure SQL; generated deployment tests check configuration rather than prove that cloud deployment succeeds.
+
+Revision (2026-11-21): CD calls the reusable CI workflow for the same `main` SHA.
+CI handles other pushes and PRs directly and builds images with provenance disabled.
+CD reads the OIDC IDs from Actions secrets and checks both live APIs before and
+after publishing the static UI.
 
 ## 10. Deliberately not building a gateway or message broker
 Date: 2026-11-17
