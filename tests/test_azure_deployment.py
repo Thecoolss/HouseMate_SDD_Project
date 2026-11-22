@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('render_app', ROOT / 'scripts/azure/render_app.py')
@@ -42,6 +43,9 @@ def test_deployment_preserves_service_isolation_and_scale_to_zero(env, service, 
     assert secrets['database-url'] == env[service.upper() + '_DATABASE_URL']
     if service == 'fairness':
         assert variables['HOUSEHOLD_URL']['value'] == env['HOUSEHOLD_URL']
+        manifest = yaml.safe_load((ROOT / 'system.yaml').read_text())
+        household_call, = manifest['services']['fairness']['calls']
+        assert float(variables['HOUSEHOLD_TIMEOUT_S']['value']) == household_call['timeout_s']
     probes = {p['type']: p for p in container['probes']}
     assert probes['Startup']['failureThreshold'] * probes['Startup']['periodSeconds'] > 90
     assert 'tcpSocket' in probes['Liveness']

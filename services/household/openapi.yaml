@@ -375,9 +375,9 @@ components:
       properties:
         title: { type: string, maxLength: 200 }
         category:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/Category"
-          nullable: true
+            - { type: string, nullable: true, enum: [null] }
           description: Optional. Omitted or null means general.
         description: { type: string, nullable: true }
         difficulty: { $ref: "#/components/schemas/Difficulty" }
