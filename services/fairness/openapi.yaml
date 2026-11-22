@@ -119,10 +119,10 @@ components:
         user_id: { type: integer }
         username: { type: string, nullable: true, description: Null when household is unavailable. }
         snapshot:
-          nullable: true
           description: Null when no calculation exists for this member yet.
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/Snapshot"
+            - { type: object, nullable: true, enum: [null] }
     FairnessView:
       type: object
       required: [household_available, rows]

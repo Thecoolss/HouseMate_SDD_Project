@@ -246,8 +246,9 @@ SQL connections require encryption. A new connection retries only recognized tra
 errors (including Azure SQL 40613) with 1/2/4/8/10-second capped backoff, for a 90-second
 budget plus at most one 5-second login attempt. Invalid credentials/database permissions
 fail immediately. SQL statements and migrations themselves are never blindly replayed.
-SQL Server uses `NullPool` to avoid leaving idle pooled sessions open. Fairness's cloud
-HTTP timeout is 90 seconds; local defaults remain short. The browser allows 230 seconds
+SQL Server uses `NullPool` to avoid leaving idle pooled sessions open. Fairness uses a
+5-second HTTP timeout for each call to Household on Azure, matching `system.yaml`.
+Local Compose sets this timeout to 2 seconds. The browser allows 230 seconds
 for a cloud request. An Azure startup `503` without an application error prompts the
 user to try again shortly. A JSON error from Fairness keeps its own explanation.
 

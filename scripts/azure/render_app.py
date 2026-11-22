@@ -23,7 +23,7 @@ def render(service, env):
     if service == 'fairness':
         variables += [
             {'name': 'HOUSEHOLD_URL', 'value': env['HOUSEHOLD_URL']},
-            {'name': 'HOUSEHOLD_TIMEOUT_S', 'value': '90'},
+            {'name': 'HOUSEHOLD_TIMEOUT_S', 'value': '5'},
         ]
     else:
         variables.append({'name': 'HOUSEHOLD_TIMEZONE', 'value': 'Europe/Paris'})

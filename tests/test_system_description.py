@@ -7,6 +7,7 @@ from pathlib import Path
 import jsonschema
 import pytest
 import yaml
+from openapi_schema_validator import OAS30Validator
 
 ROOT = Path(__file__).resolve().parents[1]
 SYSTEM = yaml.safe_load((ROOT / "system.yaml").read_text())
@@ -35,6 +36,28 @@ def test_system_yaml_validates_against_the_schema():
     schema = json.loads((ROOT / "system.schema.json").read_text())
 
     jsonschema.validate(SYSTEM, schema)
+
+
+def test_task_creation_contract_allows_null_category_or_a_known_category():
+    spec = _openapi("household")
+    body = spec["paths"]["/tasks"]["post"]["requestBody"]
+    validator = OAS30Validator(spec).evolve(schema=body["content"]["application/json"]["schema"])
+    task = {"title": "Wash dishes", "difficulty": "easy"}
+
+    validator.validate(task)
+    validator.validate({**task, "category": None})
+    validator.validate({**task, "category": "cleaning"})
+    assert not validator.is_valid({**task, "category": "unknown"})
+
+
+def test_fairness_view_contract_allows_a_member_without_a_snapshot():
+    spec = _openapi("fairness")
+    response = spec["paths"]["/fairness"]["get"]["responses"]["200"]
+    validator = OAS30Validator(spec).evolve(schema=response["content"]["application/json"]["schema"])
+    member = {"user_id": 1, "username": "alice"}
+
+    validator.validate({"household_available": True, "rows": [{**member, "snapshot": None}]})
+    assert not validator.is_valid({"household_available": True, "rows": [{**member, "snapshot": {}}]})
 
 
 @pytest.mark.parametrize("service", SERVICES)
